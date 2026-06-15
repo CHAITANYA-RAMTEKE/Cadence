@@ -1,5 +1,6 @@
-/* Cadence service worker — network-first, cache as offline fallback. */
-const CACHE = 'cadence-v5';
+/* Cadence service worker — network-first, cache as offline fallback.
+   Bump CACHE on every deploy so clients fetch fresh assets and purge the old cache. */
+const CACHE = 'cadence-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -13,7 +14,12 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // Fetch fresh copies (bypass the HTTP cache) when warming the cache.
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -27,7 +33,8 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    fetch(e.request)
+    // Network-first, bypassing the HTTP cache so a deploy shows up immediately.
+    fetch(e.request, { cache: 'no-store' })
       .then((resp) => {
         const copy = resp.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));

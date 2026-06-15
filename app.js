@@ -855,9 +855,15 @@ function toast(msg) {
 
 /* ---------------- service worker ---------------- */
 function registerSW() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => { /* offline still fine */ });
-  }
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('sw.js').catch(() => { /* offline still fine */ });
+  // When a freshly deployed SW takes control, reload once to pick up new assets.
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    location.reload();
+  });
 }
 
 init();
