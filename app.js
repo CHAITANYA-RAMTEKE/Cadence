@@ -4,11 +4,14 @@ const app = document.getElementById('app');
 const overlay = document.getElementById('overlay');
 const toastEl = document.getElementById('toast');
 
-let view = 'today';           // 'onboard' | 'today' | 'you' | 'focus'
+let view = 'today';           // onboard | today | priorities | notes | note | focus | you
 let onbStep = 1;
 let ob = { name: '', identity: 'getting better', sugg: '20-minute walk' };
 let comeback = null;          // {gap, parkedCount} after a break
 let timer = { id: null, total: 25 * 60, remaining: 25 * 60, handle: null, running: false };
+let inFocus = false;          // Do Not Disturb: true while a focus session is running
+let currentNoteId = null;
+let lastRenderedView = null;
 
 /* ---------------- icons (inline SVG, offline-safe) ---------------- */
 const PATHS = {
@@ -24,7 +27,16 @@ const PATHS = {
   pause: '<path d="M8 5v14M16 5v14"/>',
   heart: '<path d="M12 20s-7-4.5-7-9.5A3.5 3.5 0 0 1 12 7a3.5 3.5 0 0 1 7 3.5C19 15.5 12 20 12 20z"/>',
   coffee: '<path d="M5 9h12v4a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5z"/><path d="M17 10h2a2 2 0 0 1 0 4h-2"/><path d="M8 3v2M11 3v2M14 3v2"/>',
-  party: '<path d="M4 20l5-13 9 9z"/><path d="M14 6c1-1 3-1 4 0M16 3v2M20 7h2M19 10l1 1"/>'
+  party: '<path d="M4 20l5-13 9 9z"/><path d="M14 6c1-1 3-1 4 0M16 3v2M20 7h2M19 10l1 1"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4 6.5 6.5 0 0 0 20 14.5z"/>',
+  bolt: '<path d="M13 2L4 14h7l-2 8 9-12h-7z" fill="currentColor" stroke="none"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/>',
+  arrowRight: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  note: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/>',
+  listCheck: '<path d="M4 7h10M4 12h10M4 17h10M17.5 6l-2 2L14 6.5M17.5 13l-2 2L14 13.5"/>',
+  square: '<rect x="4" y="4" width="16" height="16" rx="3"/>',
+  trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/>'
 };
 function ic(name, size) {
   size = size || 22;
@@ -43,6 +55,30 @@ function greeting() {
 function prettyDate() {
   return new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 }
+function fmtTime(t) {
+  if (!t) return '';
+  const p = t.split(':'); let h = parseInt(p[0], 10); const m = p[1] || '00';
+  const ampm = h < 12 ? 'AM' : 'PM'; let hr = h % 12; if (hr === 0) hr = 12;
+  return hr + ':' + m + ' ' + ampm;
+}
+function relTime(ts) {
+  if (!ts) return '';
+  const m = Math.floor((Date.now() - ts) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+
+/* ---------------- Eisenhower lanes ---------------- */
+const LANES = {
+  do: { name: 'Do now', desc: 'important + urgent', icon: 'bolt', bg: '#EAF3DE', fg: '#27500A', act: '#639922' },
+  plan: { name: 'Plan', desc: 'important · long game', icon: 'calendar', bg: '#E6F1FB', fg: '#0C447C', act: '#185FA5' },
+  quick: { name: 'Quick', desc: 'urgent · do fast', icon: 'arrowRight', bg: '#FAEEDA', fg: '#633806', act: '#BA7517' },
+  letgo: { name: 'Let go', desc: 'a win, not a failure', icon: 'feather', bg: '#FAECE7', fg: '#712B13', act: '#D85A30' }
+};
+function laneOf(p) { return p.important && p.urgent ? 'do' : p.important ? 'plan' : p.urgent ? 'quick' : 'letgo'; }
 
 /* ---------------- init ---------------- */
 function init() {
@@ -62,24 +98,35 @@ function init() {
 function render() {
   if (view === 'onboard') app.innerHTML = renderOnboard();
   else if (view === 'focus') app.innerHTML = renderFocus();
-  else app.innerHTML = renderShell(view === 'you' ? renderYou() : renderToday());
-  app.scrollTop = 0;
+  else app.innerHTML = renderShell(
+    view === 'you' ? renderYou() :
+      view === 'priorities' ? renderPriorities() :
+        view === 'notes' ? renderNotes() :
+          view === 'note' ? renderNote() :
+            renderToday()
+  );
+  if (view !== lastRenderedView) { window.scrollTo(0, 0); lastRenderedView = view; }
 }
-
 function renderShell(inner) {
   return '<div class="screen">' + inner + '</div>' + renderNav();
 }
 function renderNav() {
+  const on = (v) => (view === v) || (v === 'notes' && view === 'note');
   const tab = (v, name, label) =>
-    '<button class="navbtn ' + (view === v ? 'on' : '') + '" onclick="go(\'' + v + '\')">' +
-    ic(name, 22) + '<span>' + label + '</span></button>';
+    '<button class="navbtn ' + (on(v) ? 'on' : '') + '" onclick="go(\'' + v + '\')">' +
+    ic(name, 21) + '<span>' + label + '</span></button>';
   return '<nav class="nav">' +
     tab('today', 'sun', 'Today') +
+    tab('priorities', 'listCheck', 'Priorities') +
     '<button class="fab" aria-label="Add" onclick="openCapture()">' + ic('plus', 24) + '</button>' +
+    tab('notes', 'note', 'Notes') +
     tab('you', 'user', 'You') +
     '</nav>';
 }
-function go(v) { view = v; render(); }
+function go(v) {
+  if (view === 'note') noteLeaveCleanup();
+  view = v; render();
+}
 
 /* ---------------- onboarding ---------------- */
 function renderOnboard() {
@@ -182,13 +229,16 @@ function renderToday() {
   if (s.focus.length === 0) {
     html += '<p class="empty">Pick the one or two things that would make today a win.</p>';
   } else {
-    html += s.focus.map(i => focusRow('focus', i)).join('');
+    html += sortedFocus(s.focus).map(i => focusRow('focus', i)).join('');
   }
   if (s.focus.length < 3) {
     html +=
-      '<div class="addrow">' +
+      '<div class="addform">' +
       '<input id="add-focus" placeholder="Add a focus…" onkeydown="if(event.key===\'Enter\')addFocus()" />' +
-      '<button class="add" onclick="addFocus()">' + ic('plus', 18) + '</button></div>';
+      '<div class="addmeta">' +
+      '<input id="add-time" type="time" aria-label="Time (optional)" />' +
+      '<button class="add wide" onclick="addFocus()">' + ic('plus', 16) + ' Add</button>' +
+      '</div></div>';
   }
   html += '</section>';
 
@@ -212,10 +262,18 @@ function renderToday() {
   return html;
 }
 
+function sortedFocus(arr) {
+  return arr.slice().sort(function (a, b) {
+    if (!!a.done !== !!b.done) return a.done ? 1 : -1;
+    const ta = a.time || '99:99', tb = b.time || '99:99';
+    return ta < tb ? -1 : ta > tb ? 1 : 0;
+  });
+}
 function focusRow(list, i) {
+  const meta = i.time ? '<div class="rowmeta"><span class="mi">' + ic('clock', 12) + fmtTime(i.time) + '</span></div>' : '';
   return '<div class="card focusrow ' + (i.done ? 'done' : '') + '">' +
     '<button class="chk" aria-label="Complete" onclick="toggle(\'' + list + '\',\'' + i.id + '\')">' + ic('check', 15) + '</button>' +
-    '<div class="grow"><div class="title">' + esc(i.title) + '</div></div>' +
+    '<div class="grow"><div class="title">' + esc(i.title) + '</div>' + meta + '</div>' +
     (i.done ? '' : '<button class="start" onclick="startFocus(\'' + i.id + '\')">' + ic('play', 13) + ' Start</button>') +
     '</div>';
 }
@@ -231,6 +289,8 @@ function addFocus() {
   const el = document.getElementById('add-focus');
   const t = el && el.value.trim();
   if (!t) return;
+  const timeEl = document.getElementById('add-time');
+  const time = (timeEl && timeEl.value) || '';
   const s = Store.get();
   if (s.focus.length >= 3) {
     s.bonus.push({ id: Store.uid(), title: t, done: false });
@@ -238,7 +298,7 @@ function addFocus() {
     toast('That\'s a full focus list — saved to Bonus for today.');
     return;
   }
-  s.focus.push({ id: Store.uid(), title: t, done: false });
+  s.focus.push({ id: Store.uid(), title: t, done: false, time: time });
   Store.save(); render();
   const ni = document.getElementById('add-focus'); if (ni) ni.focus();
 }
@@ -290,9 +350,57 @@ function capture(target) {
 }
 
 /* ---------------- focus / momentum mode ---------------- */
+const FOCUS_OPTIONS = [15, 25, 45, 60];   // duration chips (minutes)
+let pendingFocusId = null;                 // task awaiting a duration choice
+let pickMins = 25;                         // currently selected duration
+let pickCustomOn = false;                  // custom input revealed?
+
 function startFocus(id) {
+  const s = Store.get();
+  pendingFocusId = id;
+  pickMins = clampMins(s.focusMins || 25);
+  pickCustomOn = FOCUS_OPTIONS.indexOf(pickMins) === -1;
+  showFocusPicker();
+}
+function clampMins(v) { return Math.max(1, Math.min(180, Math.round(+v) || 25)); }
+function showFocusPicker() {
+  const it = Store.get().focus.find(x => x.id === pendingFocusId) || { title: 'Focus' };
+  const chips = FOCUS_OPTIONS.map(m =>
+    '<button class="dur-chip' + (!pickCustomOn && m === pickMins ? ' sel' : '') +
+    '" onclick="pickDur(' + m + ')">' + m + ' min</button>').join('');
+  overlay.innerHTML =
+    '<div class="sheet-bg" onclick="closeFocusPicker()"></div>' +
+    '<div class="sheet"><div class="sheet-grip"></div>' +
+    '<h3>Ready to focus</h3>' +
+    '<div class="picker-task">' + ic('clock', 14) + ' ' + esc(it.title) + '</div>' +
+    '<div class="dur-label">Session length</div>' +
+    '<div class="dur-chips">' + chips +
+    '<button class="dur-chip' + (pickCustomOn ? ' sel' : '') + '" onclick="pickCustomDur()">Custom</button></div>' +
+    (pickCustomOn
+      ? '<div class="row gap8 dur-customrow"><input id="dur-custom" type="number" min="1" max="180" inputmode="numeric" value="' + pickMins + '" onkeydown="if(event.key===\'Enter\')beginFocus()" /><span class="faint">minutes</span></div>'
+      : '') +
+    '<button class="cta grow mt12" onclick="beginFocus()">' + ic('play', 16) + ' Begin</button>' +
+    '</div>';
+  overlay.classList.add('show');
+  if (pickCustomOn) setTimeout(() => { const el = document.getElementById('dur-custom'); if (el) el.focus(); }, 50);
+}
+function pickDur(m) { pickMins = m; pickCustomOn = false; showFocusPicker(); }
+function pickCustomDur() {
+  const el = document.getElementById('dur-custom');
+  if (el) pickMins = clampMins(el.value);
+  pickCustomOn = true; showFocusPicker();
+}
+function closeFocusPicker() { overlay.classList.remove('show'); overlay.innerHTML = ''; pendingFocusId = null; }
+function beginFocus() {
+  const id = pendingFocusId;
+  if (!id) { closeFocusPicker(); return; }
+  if (pickCustomOn) { const el = document.getElementById('dur-custom'); if (el) pickMins = clampMins(el.value); }
+  const mins = clampMins(pickMins);
+  const s = Store.get(); s.focusMins = mins; Store.save();
+  closeFocusPicker();
   timer.id = id;
-  timer.total = 25 * 60; timer.remaining = 25 * 60; timer.running = true;
+  timer.total = mins * 60; timer.remaining = mins * 60; timer.running = true;
+  inFocus = true;
   view = 'focus'; render();
   startTick();
 }
@@ -322,7 +430,7 @@ function renderFocus() {
   const C = (2 * Math.PI * 78).toFixed(1);
   return '<div class="focusview">' +
     '<button class="iconbtn back" aria-label="Back" onclick="exitFocus()">' + ic('back', 22) + '</button>' +
-    '<div class="focus-top muted sm">Notifications quiet · just this one thing</div>' +
+    '<div class="dnd">' + ic('moon', 14) + ' Do Not Disturb · notifications paused</div>' +
     '<div class="ring-wrap"><svg viewBox="0 0 180 180" width="200" height="200">' +
     '<circle cx="90" cy="90" r="78" class="ring-bg"/>' +
     '<circle id="ring-prog" cx="90" cy="90" r="78" class="ring-fg" transform="rotate(-90 90 90)" ' +
@@ -330,7 +438,7 @@ function renderFocus() {
     '<text id="timer-time" x="90" y="98" text-anchor="middle" class="ring-text">' + fmt(timer.remaining) + '</text>' +
     '</svg></div>' +
     '<div class="focus-task">' + esc(it.title) + '</div>' +
-    '<div class="firststep">' + 'First tiny step: just begin. Two minutes is enough.' + '</div>' +
+    '<div class="firststep">First tiny step: just begin. Two minutes is enough.</div>' +
     '<div class="row gap8 focus-actions">' +
     '<button class="cta ghost grow" onclick="toggleFocusRun()">' + ic(timer.running ? 'pause' : 'play', 16) + ' ' + (timer.running ? 'Pause' : 'Resume') + '</button>' +
     '<button class="cta grow" onclick="finishFocus()">' + ic('check', 16) + ' Done</button></div>' +
@@ -343,7 +451,7 @@ function exitFocus() {
     const it = Store.get().focus.find(x => x.id === timer.id);
     Store.logEvent({ t: 'focus', title: it ? it.title : '(unknown)', sec: elapsed, completed: false });
   }
-  stopTick(); view = 'today'; render();
+  inFocus = false; stopTick(); view = 'today'; render();
 }
 function finishFocus() {
   const s = Store.get();
@@ -354,7 +462,234 @@ function finishFocus() {
     it.done = true; Store.touchMomentum();
     Store.logEvent({ t: 'done', title: it.title, list: 'focus', viaFocus: true });
   }
-  Store.save(); stopTick(); view = 'today'; render();
+  Store.save(); inFocus = false; stopTick(); view = 'today'; render();
+}
+/* Do-Not-Disturb gate for any future reminder/nudge. */
+function notify(msg) {
+  if (inFocus || Store.get().onBreak) return false;
+  toast(msg);
+  return true;
+}
+
+/* ---------------- priorities (Eisenhower) ---------------- */
+function renderPriorities() {
+  const s = Store.get();
+  let html = '<header class="head"><div><h1>Priorities</h1>' +
+    '<div class="muted sm">sorted by what to actually do</div></div></header>';
+
+  const order = ['do', 'plan', 'quick', 'letgo'];
+  const active = s.priorities.filter(p => !p.done);
+  if (active.length === 0) {
+    html += '<p class="empty">Nothing here yet. Add what matters — we\'ll ask if it\'s important and urgent, then sort it for you.</p>';
+  } else {
+    order.forEach(function (k) {
+      const L = LANES[k];
+      const items = active.filter(p => laneOf(p) === k);
+      if (!items.length) return;
+      html += '<div class="lane"><div class="lh" style="background:' + L.bg + ';color:' + L.fg + '">' +
+        ic(L.icon, 16) + ' ' + L.name + '<span class="lcnt">' + L.desc + '</span></div>' +
+        items.map(p => prow(k, p)).join('') + '</div>';
+    });
+  }
+
+  html += '<div class="padd">' +
+    '<input id="pri-title" placeholder="Add a priority…" onkeydown="if(event.key===\'Enter\')addPriority()" />' +
+    '<div class="prow-toggles">' +
+    '<button class="ptoggle on" data-k="important" onclick="this.classList.toggle(\'on\')">Important</button>' +
+    '<button class="ptoggle" data-k="urgent" onclick="this.classList.toggle(\'on\')">Urgent</button>' +
+    '<button class="add wide" onclick="addPriority()">' + ic('plus', 16) + ' Add</button>' +
+    '</div></div>';
+  html += '<p class="footnote">Promote your top 1–3 into Today.</p>';
+  return html;
+}
+function prow(k, p) {
+  const L = LANES[k];
+  let action;
+  if (k === 'do' || k === 'plan') action = '<button class="pact" style="background:' + L.act + '" onclick="promoteToFocus(\'' + p.id + '\')">→ Today</button>';
+  else if (k === 'quick') action = '<button class="pact" style="background:' + L.act + '" onclick="priorityToBonus(\'' + p.id + '\')">→ Bonus</button>';
+  else action = '<button class="pact" style="background:' + L.act + '" onclick="removePriority(\'' + p.id + '\',true)">Let go</button>';
+  const rm = (k === 'letgo') ? '' :
+    '<button class="iconbtn faint" aria-label="Remove" onclick="removePriority(\'' + p.id + '\')">' + ic('x', 15) + '</button>';
+  return '<div class="prow">' +
+    '<button class="chk sm" aria-label="Complete" onclick="completePriority(\'' + p.id + '\')">' + ic('check', 13) + '</button>' +
+    '<span class="grow">' + esc(p.title) + '</span>' + action + rm + '</div>';
+}
+function addPriority() {
+  const el = document.getElementById('pri-title');
+  const t = el && el.value.trim();
+  if (!t) return;
+  const impEl = document.querySelector('.ptoggle[data-k="important"]');
+  const urgEl = document.querySelector('.ptoggle[data-k="urgent"]');
+  const important = impEl ? impEl.classList.contains('on') : true;
+  const urgent = urgEl ? urgEl.classList.contains('on') : false;
+  Store.get().priorities.push({ id: Store.uid(), title: t, important: important, urgent: urgent, done: false });
+  Store.save(); render();
+}
+function completePriority(id) {
+  const s = Store.get();
+  const p = s.priorities.find(x => x.id === id);
+  if (!p) return;
+  s.priorities = s.priorities.filter(x => x.id !== id);
+  Store.touchMomentum();
+  Store.logEvent({ t: 'done', title: p.title, list: 'priority', viaFocus: false });
+  Store.save(); render(); toast('Nice — done.');
+}
+function promoteToFocus(id) {
+  const s = Store.get();
+  const p = s.priorities.find(x => x.id === id);
+  if (!p) return;
+  if (s.focus.length >= 3) { toast('Focus is full — finish or make room first.'); return; }
+  s.priorities = s.priorities.filter(x => x.id !== id);
+  s.focus.push({ id: Store.uid(), title: p.title, done: false });
+  Store.save(); render(); toast('On today\'s focus.');
+}
+function priorityToBonus(id) {
+  const s = Store.get();
+  const p = s.priorities.find(x => x.id === id);
+  if (!p) return;
+  s.priorities = s.priorities.filter(x => x.id !== id);
+  s.bonus.push({ id: Store.uid(), title: p.title, done: false });
+  Store.save(); render(); toast('Sent to Bonus.');
+}
+function removePriority(id, letGo) {
+  const s = Store.get();
+  s.priorities = s.priorities.filter(x => x.id !== id);
+  Store.save(); render();
+  toast(letGo ? 'Let go — that\'s a win.' : 'Removed.');
+}
+
+/* ---------------- notes ---------------- */
+function renderNotes() {
+  const s = Store.get();
+  let html = '<header class="head"><h1>Notes</h1></header>';
+
+  const daily = s.notes.find(n => n.day === Store.todayStr());
+  const dprev = (daily && daily.body.trim()) ? esc(daily.body.trim().replace(/\n/g, ' ').slice(0, 80)) : 'Start today\'s note…';
+  html += '<button class="ndaily" onclick="openDailyNote()">' +
+    '<div class="ndaily-h">' + ic('note', 15) + ' Today\'s note · ' + esc(prettyDate()) + '</div>' +
+    '<div class="ndaily-p">' + dprev + '</div></button>';
+
+  const notes = s.notes.filter(n => !n.day).slice().sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  html += '<div class="block-head"><h2 class="quiet">All notes</h2></div>';
+  if (!notes.length) {
+    html += '<p class="empty sm">No notes yet. Capture a thought that isn\'t a task.</p>';
+  } else {
+    html += notes.map(function (n) {
+      const title = (n.title && n.title.trim()) || 'Untitled';
+      const prev = n.body.trim() ? esc(n.body.trim().replace(/\n/g, ' ').slice(0, 80)) : 'Empty';
+      return '<button class="ncard" onclick="openNote(\'' + n.id + '\')">' +
+        '<div class="ntitle">' + esc(title) + '</div>' +
+        '<div class="nprev">' + prev + '</div>' +
+        '<div class="ntime">' + relTime(n.updated) + '</div></button>';
+    }).join('');
+  }
+  html += '<button class="cta ghost" style="margin-top:12px" onclick="newNote()">' + ic('plus', 16) + ' New note</button>';
+  return html;
+}
+function openNote(id) { currentNoteId = id; view = 'note'; render(); }
+function openDailyNote() {
+  const s = Store.get();
+  let n = s.notes.find(x => x.day === Store.todayStr());
+  if (!n) {
+    n = { id: Store.uid(), title: '', body: '', day: Store.todayStr(), updated: Date.now() };
+    s.notes.push(n); Store.save();
+  }
+  currentNoteId = n.id; view = 'note'; render();
+}
+function newNote() {
+  const s = Store.get();
+  const n = { id: Store.uid(), title: '', body: '', day: '', updated: Date.now() };
+  s.notes.push(n); Store.save();
+  currentNoteId = n.id; view = 'note'; render();
+}
+function renderNote() {
+  const s = Store.get();
+  const n = s.notes.find(x => x.id === currentNoteId);
+  if (!n) { view = 'notes'; return renderNotes(); }
+  const isDaily = !!n.day;
+  const titleField = isDaily
+    ? '<div class="note-dtitle">' + ic('note', 17) + ' Today\'s note · ' + esc(prettyDate()) + '</div>'
+    : '<input id="note-title" class="note-title" placeholder="Title" value="' + esc(n.title) + '" oninput="saveNote()" />';
+  return '<div class="noteedit">' +
+    '<div class="note-bar">' +
+    '<button class="iconbtn" aria-label="Back" onclick="closeNote()">' + ic('back', 22) + '</button>' +
+    '<button class="iconbtn faint" aria-label="Delete note" onclick="deleteNote()">' + ic('trash', 19) + '</button>' +
+    '</div>' +
+    titleField +
+    '<div class="note-tools">' +
+    '<button class="ntool" onclick="lineToFocus()">' + ic('sun', 15) + ' Today</button>' +
+    '<button class="ntool" onclick="lineToPriority()">' + ic('listCheck', 15) + ' Priority</button>' +
+    '<button class="ntool" onclick="toggleChecklist()">' + ic('square', 15) + ' Checklist</button>' +
+    '</div>' +
+    '<textarea id="note-body" class="note-body" placeholder="Brain-dump anything…&#10;Tap a line, then send it where it belongs." oninput="saveNote()">' + esc(n.body) + '</textarea>' +
+    '</div>';
+}
+function saveNote() {
+  const s = Store.get();
+  const n = s.notes.find(x => x.id === currentNoteId);
+  if (!n) return;
+  const tEl = document.getElementById('note-title');
+  const bEl = document.getElementById('note-body');
+  if (tEl) n.title = tEl.value;
+  if (bEl) n.body = bEl.value;
+  n.updated = Date.now();
+  Store.save();
+}
+function noteLeaveCleanup() {
+  saveNote();
+  const s = Store.get();
+  const n = s.notes.find(x => x.id === currentNoteId);
+  if (n && !(n.title && n.title.trim()) && !(n.body && n.body.trim())) {
+    s.notes = s.notes.filter(x => x.id !== currentNoteId);
+    Store.save();
+  }
+  currentNoteId = null;
+}
+function closeNote() { go('notes'); }
+function deleteNote() {
+  if (!confirm('Delete this note?')) return;
+  const s = Store.get();
+  s.notes = s.notes.filter(x => x.id !== currentNoteId);
+  Store.save();
+  currentNoteId = null; view = 'notes'; render(); toast('Note deleted.');
+}
+function curLine(ta) {
+  const v = ta.value, pos = ta.selectionStart;
+  const start = v.lastIndexOf('\n', pos - 1) + 1;
+  let end = v.indexOf('\n', pos); if (end === -1) end = v.length;
+  return { v: v, start: start, end: end, text: v.slice(start, end) };
+}
+function addToFocusOrBonus(text) {
+  const s = Store.get();
+  if (s.focus.length < 3) {
+    s.focus.push({ id: Store.uid(), title: text, done: false });
+    Store.save(); toast('Sent to Today\'s focus.');
+  } else {
+    s.bonus.push({ id: Store.uid(), title: text, done: false });
+    Store.save(); toast('Focus was full — sent to Bonus.');
+  }
+}
+function lineToFocus() {
+  const ta = document.getElementById('note-body'); if (!ta) return;
+  const text = curLine(ta).text.replace(/^\[[ xX]\]\s*/, '').trim();
+  if (!text) { toast('Put your cursor on a line with text.'); return; }
+  addToFocusOrBonus(text);
+}
+function lineToPriority() {
+  const ta = document.getElementById('note-body'); if (!ta) return;
+  const text = curLine(ta).text.replace(/^\[[ xX]\]\s*/, '').trim();
+  if (!text) { toast('Put your cursor on a line with text.'); return; }
+  Store.get().priorities.push({ id: Store.uid(), title: text, important: true, urgent: false, done: false });
+  Store.save(); toast('Added to Priorities (Plan).');
+}
+function toggleChecklist() {
+  const ta = document.getElementById('note-body'); if (!ta) return;
+  const l = curLine(ta);
+  const nl = /^\[[ xX]\]\s/.test(l.text) ? l.text.replace(/^\[[ xX]\]\s/, '') : '[ ] ' + l.text;
+  ta.value = l.v.slice(0, l.start) + nl + l.v.slice(l.end);
+  const pos = l.start + nl.length;
+  ta.setSelectionRange(pos, pos); ta.focus();
+  saveNote();
 }
 
 /* ---------------- you ---------------- */
@@ -484,7 +819,6 @@ function exportData() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   toast('Backed up. Keep the file somewhere safe.');
 }
-
 function importData() {
   const input = document.createElement('input');
   input.type = 'file'; input.accept = 'application/json,.json';

@@ -30,6 +30,9 @@ const Store = (function () {
     bonus: [],                      // [{id,title,done}]
     parked: [],                     // [{id,title}] — never shoved at you
     onBreak: false,
+    focusMins: 25,                  // last-used focus-session length (minutes) — remembered for next time
+    priorities: [],                 // [{id,title,important,urgent,done}] — Eisenhower backlog
+    notes: [],                      // [{id,title,body,day,updated}] — day set => daily journal note
     history: []                     // append-only event log — raw material for v2 (estimation, energy, insights)
   };
 

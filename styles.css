@@ -201,8 +201,81 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-so
   transform: translateY(100%); transition: transform .25s ease; }
 #overlay.show .sheet { transform: translateY(0); }
 .sheet-grip { width: 40px; height: 4px; border-radius: 2px; background: var(--border); margin: 4px auto 16px; }
+.picker-task { display: flex; align-items: center; gap: 7px; font-weight: 600; color: var(--accent-ink);
+  background: var(--accent-soft); border-radius: var(--radius-sm); padding: 11px 13px; margin: 4px 0 16px; }
+.dur-label { font-size: 13px; color: var(--muted); margin-bottom: 9px; }
+.dur-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.dur-chip { flex: 1 1 0; min-width: 64px; padding: 11px 10px; border-radius: var(--radius-sm); cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600; font-family: inherit; }
+.dur-chip:active { transform: scale(0.97); }
+.dur-chip.sel { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); box-shadow: 0 0 0 2px var(--accent-soft); }
+.dur-customrow { align-items: center; margin-top: 12px; }
+.dur-customrow input { width: 90px; flex: none; text-align: center; }
 #toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(20px); z-index: 50;
   background: var(--accent-ink); color: #fff; padding: 11px 18px; border-radius: 999px; font-size: 13px;
   max-width: 88%; text-align: center; opacity: 0; pointer-events: none; transition: all .25s ease; }
 @media (prefers-color-scheme: dark) { #toast { background: #2f2d3d; } }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ===== v2 additions: 5-tab nav, add form, DND, priorities, notes ===== */
+
+/* nav: fit Today · Priorities · (+) · Notes · You */
+.navbtn { padding: 4px 2px; font-size: 10px; flex: 1; min-width: 0; }
+.navbtn .i { width: 21px; height: 21px; }
+.fab { flex: none; }
+
+/* today add form (title + optional time) */
+.addform { margin-top: 6px; }
+.addform > input { margin-bottom: 8px; }
+.addmeta { display: flex; gap: 8px; align-items: center; }
+.addmeta input[type="time"] { width: auto; flex: 1; padding: 9px 10px; }
+.add.wide { width: auto; height: 42px; padding: 0 16px; background: var(--accent); color: #fff; border: none; gap: 6px; flex: none; }
+.rowmeta { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.mi { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+
+/* focus Do-Not-Disturb pill */
+.dnd { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted);
+  background: var(--surface-2); padding: 7px 14px; border-radius: 999px; margin: 4px 0 16px; }
+
+/* priorities — Eisenhower lanes */
+.lane { margin-bottom: 16px; }
+.lh { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600;
+  padding: 8px 12px; border-radius: var(--radius-sm); margin-bottom: 4px; }
+.lh .lcnt { margin-left: auto; font-size: 11px; font-weight: 500; opacity: 0.85; }
+.prow { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.prow:last-child { border-bottom: none; }
+.pact { flex: none; border: none; border-radius: 999px; color: #fff; font-size: 11px; font-weight: 600;
+  padding: 5px 11px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.pact:active { transform: scale(0.96); }
+.padd { margin-top: 16px; }
+.padd > input { margin-bottom: 8px; }
+.prow-toggles { display: flex; gap: 8px; align-items: center; }
+.ptoggle { flex: none; border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  border-radius: 999px; font-size: 12px; font-weight: 500; padding: 8px 13px; cursor: pointer; font-family: inherit; }
+.ptoggle.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+/* notes — list */
+.ndaily { display: block; width: 100%; text-align: left; background: var(--accent-soft); border: none;
+  border-radius: var(--radius); padding: 13px 14px; cursor: pointer; margin-bottom: 16px; font-family: inherit; }
+.ndaily-h { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--accent-ink); }
+.ndaily-p { font-size: 13px; color: var(--accent); margin-top: 5px; }
+.ncard { display: block; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px; margin-bottom: 9px; cursor: pointer; font-family: inherit; color: var(--text); }
+.ntitle { font-weight: 600; font-size: 14px; }
+.nprev { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ntime { font-size: 11px; color: var(--faint); margin-top: 6px; }
+
+/* notes — editor */
+.noteedit { display: flex; flex-direction: column; }
+.note-bar { display: flex; align-items: center; justify-content: space-between; margin: -4px 0 6px; }
+.note-dtitle { display: flex; align-items: center; gap: 7px; font-size: 16px; font-weight: 600; margin: 4px 0 10px; }
+.note-title { border: none; padding: 4px 0; font-size: 19px; font-weight: 600; background: none; }
+.note-title:focus { box-shadow: none; }
+.note-tools { display: flex; gap: 8px; margin: 6px 0 12px; flex-wrap: wrap; }
+.ntool { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--accent); border-radius: 999px; font-size: 12px; font-weight: 600; padding: 6px 12px; cursor: pointer; font-family: inherit; }
+.ntool:active { transform: scale(0.96); }
+.note-body { width: 100%; min-height: 52vh; border: none; resize: none; background: none; font-family: inherit;
+  font-size: 15px; line-height: 1.6; color: var(--text); padding: 0; outline: none; }
+.note-body:focus { box-shadow: none; }
