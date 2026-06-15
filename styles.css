@@ -148,6 +148,14 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-so
 /* you */
 .stat { margin-bottom: 12px; }
 .stat-big { font-size: 22px; font-weight: 600; margin-top: 2px; }
+.profile { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 18px; flex: none; }
+.pname { font-weight: 600; font-size: 16px; }
+.stats3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.scard { background: var(--surface-2); border-radius: var(--radius-sm); padding: 12px 8px; text-align: center; }
+.scard-v { font-size: 20px; font-weight: 600; margin-top: 2px; }
+.insight { display: flex; align-items: center; gap: 8px; background: var(--teal-soft); color: var(--teal-ink); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px; margin-top: 10px; }
+.insight b { font-weight: 600; }
 .breakbtn { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; cursor: pointer;
   font-family: inherit; color: var(--text); margin: 6px 0 8px; }
 .vote { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted);

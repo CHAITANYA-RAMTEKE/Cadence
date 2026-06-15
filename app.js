@@ -6,7 +6,7 @@ const toastEl = document.getElementById('toast');
 
 let view = 'today';           // 'onboard' | 'today' | 'you' | 'focus'
 let onbStep = 1;
-let ob = { persona: '', identity: 'getting better', sugg: '20-minute walk' };
+let ob = { name: '', identity: 'getting better', sugg: '20-minute walk' };
 let comeback = null;          // {gap, parkedCount} after a break
 let timer = { id: null, total: 25 * 60, remaining: 25 * 60, handle: null, running: false };
 
@@ -94,13 +94,12 @@ function renderOnboard() {
       '<p class="muted">Plan a kind, winnable day. Drop off whenever — there\'s never any catching up.</p>' +
       '<button class="cta mt-auto" onclick="obNext(2)">Begin</button></div>';
   } else if (onbStep === 2) {
-    const chip = (label, val) =>
-      '<button class="chip" onclick="obPersona(\'' + val + '\')">' + label + '</button>';
     body =
       '<div class="ob">' +
-      '<h2>What brings you here?</h2><p class="muted sm">No wrong answer — it just tunes the wording.</p>' +
-      chip('Studying', 'student') + chip('Working', 'working') +
-      chip('Building better habits', 'habits') + chip('A bit of everything', 'all') +
+      '<h2>First — what should I call you?</h2><p class="muted sm">Just a first name is perfect.</p>' +
+      '<input id="ob-name" placeholder="Your name" value="' + esc(ob.name) + '" />' +
+      '<button class="cta" style="margin-top:14px" onclick="obName(false)">Continue</button>' +
+      '<button class="ghost" onclick="obName(true)">Skip</button>' +
       '</div>';
   } else if (onbStep === 3) {
     const chip = (label, idv, sugg) =>
@@ -131,19 +130,23 @@ function renderOnboard() {
   return '<div class="onboard">' + (onbStep < 6 ? '<div class="dots">' + dots + '</div>' : '') + body + '</div>';
 }
 function obNext(n) { onbStep = n; render(); }
-function obPersona(p) { ob.persona = p; onbStep = 3; render(); }
+function obName(skip) {
+  if (!skip) { const el = document.getElementById('ob-name'); ob.name = (el && el.value.trim()) || ''; }
+  else { ob.name = ''; }
+  onbStep = 3; render();
+}
 function obIdentity(id, sugg) { ob.identity = id; ob.sugg = sugg; onbStep = 4; render(); }
 function obFinish() {
   const el = document.getElementById('ob-first');
   const first = el && el.value.trim();
   const t = Store.todayStr();
   Store.set({
-    onboarded: true, identity: ob.identity || 'getting better', persona: ob.persona,
+    onboarded: true, name: ob.name, identity: ob.identity || 'getting better',
     momentum: 1, lastMomentumDate: t, currentDate: t, lastActiveDate: t,
     focus: first ? [{ id: Store.uid(), title: first, done: false }] : []
   });
   view = 'today'; render();
-  toast('You\'re set. Today\'s already a win waiting to happen.');
+  toast((ob.name ? 'You\'re set, ' + ob.name + '. ' : 'You\'re set. ') + 'Today\'s already a win waiting.');
 }
 
 /* ---------------- today ---------------- */
@@ -155,13 +158,13 @@ function renderToday() {
   html +=
     '<header class="head"><div>' +
     '<div class="muted sm">' + esc(prettyDate()) + '</div>' +
-    '<h1>' + greeting() + '</h1></div>' +
+    '<h1>' + greeting() + (s.name ? ', ' + esc(s.name) : '') + '</h1></div>' +
     '<span class="pill">' + ic('sprout', 14) + ' Day ' + s.momentum + '</span></header>';
 
   if (comeback) {
     html +=
       '<div class="banner soft">' +
-      '<div><b>Welcome back — it\'s a clean page.</b>' +
+      '<div><b>Welcome back' + (s.name ? ', ' + esc(s.name) : '') + ' — it\'s a clean page.</b>' +
       '<div class="sm muted">' + (comeback.parkedCount > 0
         ? comeback.parkedCount + ' item' + (comeback.parkedCount > 1 ? 's are' : ' is') + ' parked if you want ' + (comeback.parkedCount > 1 ? 'them' : 'it') + '.'
         : 'Pick one thing and you\'re moving again.') + '</div></div>' +
@@ -359,12 +362,30 @@ function renderYou() {
   const s = Store.get();
   let html = '<header class="head"><h1>You</h1></header>';
 
-  html += '<div class="card stat"><div class="muted sm">You\'re working toward</div>' +
-    '<div class="stat-big">' + esc(s.identity) + '</div></div>';
+  html += '<div class="card profile">' +
+    '<div class="avatar">' + esc((s.name && s.name.trim() ? s.name.trim().charAt(0) : '·').toUpperCase()) + '</div>' +
+    '<div class="grow"><div class="pname">' + esc(s.name || 'Friend') + '</div>' +
+    '<div class="muted sm">working toward ' + esc(s.identity) + '</div></div>' +
+    '<button class="link" onclick="editProfile()">Edit</button></div>';
 
-  html += '<div class="row gap8">' +
-    '<div class="card stat grow"><div class="muted sm">Momentum</div><div class="stat-big teal">' + s.momentum + '<span class="sm"> ' + (s.momentum === 1 ? 'day' : 'days') + '</span></div>' +
-    '<div class="faint sm">a gap never resets it</div></div></div>';
+  html += '<div class="card stat"><div class="muted sm">Momentum</div>' +
+    '<div class="stat-big teal">' + s.momentum + '<span class="sm"> ' + (s.momentum === 1 ? 'day' : 'days') + '</span></div>' +
+    '<div class="faint sm">a gap never resets it</div></div>';
+
+  const ins = computeInsights();
+  html += '<section class="block"><div class="block-head"><h2 class="quiet">Your rhythm</h2>' +
+    '<span class="faint sm">your v2 brain, forming</span></div>' +
+    '<div class="stats3">' +
+    statCard('Things done', ins.done) +
+    statCard('Focused', fmtMin(ins.focusedMin)) +
+    statCard('Days won', ins.daysWon) +
+    '</div>';
+  if (ins.done >= 3 && ins.sharpestHour != null) {
+    html += '<div class="insight">' + ic('sprout', 16) + '<span>You get the most done around <b>' + hourLabel(ins.sharpestHour) + '</b>.</span></div>';
+  } else {
+    html += '<p class="faint sm" style="margin:10px 2px 0">Patterns show up after a few days — the more you use it, the smarter your plan gets.</p>';
+  }
+  html += '</section>';
 
   html += '<section class="block"><div class="block-head"><h2 class="quiet">Parked</h2>' +
     '<span class="faint sm">no rush, ever</span></div>';
@@ -411,6 +432,42 @@ function forget(id) {
   toast('Let go. That\'s a win too.');
 }
 function toggleBreak() { const s = Store.get(); Store.set({ onBreak: !s.onBreak }); render(); }
+
+function computeInsights() {
+  const h = Store.get().history || [];
+  let done = 0, focusedSec = 0, daysWon = 0, sharpestHour = null, max = 0;
+  const hours = {};
+  h.forEach(function (e) {
+    if (e.t === 'done') { done++; hours[e.hour] = (hours[e.hour] || 0) + 1; }
+    else if (e.t === 'focus') { focusedSec += (e.sec || 0); }
+    else if (e.t === 'day' && e.won) { daysWon++; }
+  });
+  Object.keys(hours).forEach(function (k) { if (hours[k] > max) { max = hours[k]; sharpestHour = parseInt(k, 10); } });
+  return { done: done, focusedMin: Math.round(focusedSec / 60), daysWon: daysWon, sharpestHour: sharpestHour };
+}
+function hourLabel(h) {
+  if (h == null) return '—';
+  const ampm = h < 12 ? 'am' : 'pm';
+  const hr = (h % 12) || 12;
+  return hr + ' ' + ampm;
+}
+function fmtMin(m) {
+  if (!m) return '0m';
+  if (m < 60) return m + 'm';
+  return Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
+}
+function statCard(label, val) {
+  return '<div class="scard"><div class="faint sm">' + label + '</div><div class="scard-v">' + val + '</div></div>';
+}
+function editProfile() {
+  const s = Store.get();
+  const name = prompt('What should I call you?', s.name || '');
+  if (name === null) return;
+  const goal = prompt('What are you working toward?', s.identity || '');
+  Store.set({ name: name.trim() || s.name, identity: (goal || '').trim() || s.identity });
+  render();
+  toast('Updated.');
+}
 function confirmReset() {
   if (confirm('Reset all your data and start fresh? This can\'t be undone.')) {
     Store.reset(); comeback = null; view = 'onboard'; onbStep = 1; render();

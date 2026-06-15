@@ -19,6 +19,7 @@ const Store = (function () {
 
   const defaults = {
     onboarded: false,
+    name: '',                       // what to call them, e.g. "Chaitanya"
     identity: 'getting better',     // their aspiration, e.g. "getting fit"
     persona: '',
     momentum: 0,                    // cumulative days shown up — only ever goes up
