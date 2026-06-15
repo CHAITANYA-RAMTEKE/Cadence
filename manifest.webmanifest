@@ -1,0 +1,16 @@
+{
+  "name": "Cadence — a planner you can't fall behind in",
+  "short_name": "Cadence",
+  "description": "Plan a kind, winnable day. Drop off whenever — there's never any catching up.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F6F2",
+  "theme_color": "#534AB7",
+  "categories": ["productivity", "lifestyle"],
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
