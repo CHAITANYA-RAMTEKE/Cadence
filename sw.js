@@ -1,5 +1,5 @@
 /* Cadence service worker — network-first, cache as offline fallback. */
-const CACHE = 'cadence-v3';
+const CACHE = 'cadence-v4';
 const ASSETS = [
   './',
   './index.html',
