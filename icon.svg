@@ -1,5 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="112" fill="#534AB7"/>
-  <path d="M150 268 l58 58 l154 -150" fill="none" stroke="#ffffff" stroke-width="36"
-        stroke-linecap="round" stroke-linejoin="round"/>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A327F"/>
+      <stop offset="1" stop-color="#685EC6"/>
+    </linearGradient>
+    <clipPath id="above"><rect x="0" y="0" width="512" height="322"/></clipPath>
+  </defs>
+  <rect width="512" height="512" fill="url(#sky)"/>
+  <g stroke="#FBCB6E" stroke-width="11" stroke-linecap="round">
+    <line x1="151.7" y1="256.0" x2="123.5" y2="245.8"/>
+    <line x1="176.2" y1="216.9" x2="154.6" y2="196.0"/>
+    <line x1="214.4" y1="191.1" x2="203.2" y2="163.3"/>
+    <line x1="256" y1="183" x2="256" y2="153"/>
+    <line x1="297.6" y1="191.1" x2="308.8" y2="163.3"/>
+    <line x1="335.8" y1="216.9" x2="357.4" y2="196.0"/>
+    <line x1="360.3" y1="256.0" x2="388.5" y2="245.8"/>
+  </g>
+  <circle cx="256" cy="294" r="95" fill="#FBCB6E" clip-path="url(#above)"/>
+  <rect x="0" y="315.5" width="512" height="13" rx="6" fill="#D2CFF7"/>
 </svg>
