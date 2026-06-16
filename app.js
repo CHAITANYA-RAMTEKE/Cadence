@@ -769,7 +769,7 @@ function renderYou() {
     '<p class="faint sm" style="margin:10px 2px 0">Saves a JSON file with everything — including the quiet history that powers future features. Stored only on this device.</p></section>';
 
   html += '<button class="ghost danger" onclick="confirmReset()">Reset everything</button>';
-  html += '<p class="footnote">Cadence v1 · made to be kind.</p>';
+  html += '<p class="footnote">Cadence v1 · made to be kind.' + (self.CADENCE_VERSION ? ' · ' + self.CADENCE_VERSION : '') + '</p>';
   return html;
 }
 function restore(id) {
@@ -877,14 +877,22 @@ function toast(msg) {
 
 /* ---------------- service worker ---------------- */
 function registerSW() {
+  console.log('Cadence ' + (self.CADENCE_VERSION || 'dev'));
   if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('sw.js').catch(() => { /* offline still fine */ });
+  // updateViaCache:'none' → the browser bypasses the HTTP cache when checking sw.js for updates.
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => { /* offline still fine */ });
   // When a freshly deployed SW takes control, reload once to pick up new assets.
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (refreshing) return;
     refreshing = true;
     location.reload();
+  });
+  // Re-check for a new version each time the app regains focus (covers a reopened installed PWA).
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      navigator.serviceWorker.getRegistration().then((r) => { if (r) r.update(); });
+    }
   });
 }
 
