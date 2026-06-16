@@ -244,10 +244,13 @@ function renderToday() {
 
   html += '<section class="block"><div class="block-head"><h2 class="quiet">Bonus</h2>' +
     '<span class="faint sm">only if you have energy</span></div>';
+  if (allDone && s.bonus.some(i => !i.done)) {
+    html += '<p class="bonus-hint">' + ic('party', 13) + ' Day\'s already won — give a bonus your focus only if you feel like it.</p>';
+  }
   if (s.bonus.length === 0) {
     html += '<p class="empty sm">Nothing here — and that\'s fine.</p>';
   } else {
-    html += s.bonus.map(i => bonusRow(i)).join('');
+    html += s.bonus.map(i => bonusRow(i, allDone)).join('');
   }
   html += '</section>';
 
@@ -277,10 +280,15 @@ function focusRow(list, i) {
     (i.done ? '' : '<button class="start" onclick="startFocus(\'' + i.id + '\')">' + ic('play', 13) + ' Start</button>') +
     '</div>';
 }
-function bonusRow(i) {
+function bonusRow(i, won) {
+  // Once today's focus is all done, a bonus item can be promoted into Focus (and timed) — a "bonus round".
+  const promote = (won && !i.done)
+    ? '<button class="bonus-focus" onclick="promoteBonusFocus(\'' + i.id + '\')">' + ic('play', 11) + ' Focus</button>'
+    : '';
   return '<div class="bonusrow ' + (i.done ? 'done' : '') + '">' +
     '<button class="chk sm" aria-label="Complete" onclick="toggle(\'bonus\',\'' + i.id + '\')">' + ic('check', 13) + '</button>' +
     '<span class="grow">' + esc(i.title) + '</span>' +
+    promote +
     '<button class="iconbtn faint" aria-label="Remove" onclick="dropBonus(\'' + i.id + '\')">' + ic('x', 15) + '</button>' +
     '</div>';
 }
@@ -317,6 +325,20 @@ function dropBonus(id) {
   const s = Store.get();
   s.bonus = s.bonus.filter(x => x.id !== id);
   Store.save(); render();
+}
+/* Bonus round: only after today's focus is fully won, move a bonus item into Focus and start a session. */
+function promoteBonusFocus(id) {
+  const s = Store.get();
+  const won = s.focus.length > 0 && s.focus.every(i => i.done);
+  if (!won) { toast('Finish today\'s focus first — then a bonus round opens.'); return; }
+  const idx = s.bonus.findIndex(x => x.id === id);
+  if (idx === -1) return;
+  const item = s.bonus.splice(idx, 1)[0];
+  item.done = false;
+  item.origin = 'bonus';           // keep provenance for v2 insights
+  s.focus.push(item);              // it's now a real focus item — timer/finish logic works unchanged
+  Store.save();
+  startFocus(item.id);            // open the duration picker → begin the bonus round
 }
 function clearComeback() { comeback = null; render(); }
 
