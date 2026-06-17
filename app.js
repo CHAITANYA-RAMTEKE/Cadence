@@ -36,7 +36,12 @@ const PATHS = {
   note: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/>',
   listCheck: '<path d="M4 7h10M4 12h10M4 17h10M17.5 6l-2 2L14 6.5M17.5 13l-2 2L14 13.5"/>',
   square: '<rect x="4" y="4" width="16" height="16" rx="3"/>',
-  trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/>'
+  trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M7 7l1 13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-13"/>',
+  activity: '<path d="M3 12h4l2-6 4 14 2-8h6"/>',
+  dumbbell: '<path d="M6 8v8M3 10v4M18 8v8M21 10v4M6 12h12"/>',
+  book: '<path d="M4 5a2 2 0 0 1 2-2h6v17H6a2 2 0 0 1-2-2z"/><path d="M20 5a2 2 0 0 0-2-2h-6v17h6a2 2 0 0 0 2-2z"/>',
+  droplet: '<path d="M12 3s6 6.5 6 10.5A6 6 0 0 1 6 13.5C6 9.5 12 3 12 3z"/>',
+  pencil: '<path d="M4 20l1-4 11-11 3 3-11 11z"/><path d="M14 7l3 3"/>'
 };
 function ic(name, size) {
   size = size || 22;
@@ -241,6 +246,8 @@ function renderToday() {
       '</div></div>';
   }
   html += '</section>';
+
+  html += renderRhythm(s);
 
   html += '<section class="block"><div class="block-head"><h2 class="quiet">Bonus</h2>' +
     '<span class="faint sm">only if you have energy</span></div>';
@@ -493,6 +500,182 @@ function notify(msg) {
   return true;
 }
 
+/* ---------------- daily rhythm (habits) ----------------
+   Forgiving by design: no resetting streaks ever — cumulative counts only.
+   Missed days are invisible (never red, never a "you missed"). Rest days aren't misses.
+   Habits persist across days (rollDay never touches them); today-done = log[todayStr]. */
+const HABIT_ICONS = ['sprout', 'activity', 'dumbbell', 'book', 'droplet', 'pencil', 'heart', 'moon'];
+const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];   // Mon=0 .. Sun=6
+let habitDraft = null;   // {id?, title, icon, type, perWeek, days[]} while the sheet is open
+
+function weekday0(dateStr) { return (new Date(dateStr + 'T00:00:00').getDay() + 6) % 7; } // Mon=0
+function weekDates() {
+  const t = Store.todayStr();
+  const monday = new Date(t + 'T00:00:00');
+  monday.setDate(monday.getDate() - weekday0(t));
+  const out = [];
+  for (let i = 0; i < 7; i++) { const x = new Date(monday); x.setDate(monday.getDate() + i); out.push(Store.todayStr(x)); }
+  return out;
+}
+function habitDoneToday(h) { return !!(h.log && h.log[Store.todayStr()]); }
+function habitMonthCount(h) {
+  const pre = Store.todayStr().slice(0, 7);
+  let n = 0; for (const k in (h.log || {})) if (k.indexOf(pre) === 0) n++;
+  return n;
+}
+function habitWeekCount(h) {
+  let n = 0; weekDates().forEach(function (d) { if (h.log && h.log[d]) n++; });
+  return n;
+}
+function habitScheduledToday(h) {
+  const c = h.cadence || { type: 'daily' };
+  if (c.type === 'days') return (c.days || []).indexOf(weekday0(Store.todayStr())) !== -1;
+  return true;   // daily + weekly are actionable any day
+}
+function suggestDaily(s) {
+  const id = (s.identity || '').toLowerCase();
+  if (id.indexOf('fit') >= 0) return 'Move 20 minutes';
+  if (id.indexOf('read') >= 0) return 'Read 10 pages';
+  if (id.indexOf('stud') >= 0) return 'Study 25 minutes';
+  if (id.indexOf('work') >= 0) return 'Plan tomorrow tonight';
+  return 'Move 20 minutes';
+}
+
+function renderRhythm(s) {
+  const habits = s.habits || [];
+  let html = '<section class="block"><div class="block-head"><h2 class="quiet">Daily rhythm</h2>' +
+    '<span class="faint sm">never counts against you</span></div>';
+  if (habits.length === 0) {
+    html += '<div class="rhythm-empty"><p class="empty sm">Your everyday — small reps that vote for who you\'re becoming. Missing a day never sets you back.</p>' +
+      '<button class="cta ghost" onclick="openHabitSheet()">' + ic('plus', 16) + ' Add a daily</button></div>';
+    return html + '</section>';
+  }
+  html += '<div class="rhythm">' + habits.map(habitRow).join('') + '</div>';
+  html += '<button class="rhythm-add" onclick="openHabitSheet()">' + ic('plus', 15) + ' Add a daily</button>';
+  return html + '</section>';
+}
+function habitRow(h) {
+  const c = h.cadence || { type: 'daily' };
+  const done = habitDoneToday(h);
+  let status, restDay = false;
+  if (c.type === 'weekly') {
+    const wc = habitWeekCount(h), goal = c.perWeek || 1;
+    status = wc >= goal ? '<span class="hb-pill">Done for the week</span>'
+      : '<span class="hb-meta">' + wc + '/' + goal + ' this week</span>';
+  } else if (c.type === 'days' && !habitScheduledToday(h)) {
+    restDay = true;
+    status = '<span class="hb-meta">Rest day — enjoy it</span>';
+  } else {
+    const mc = habitMonthCount(h);
+    status = (h.total || 0) === 0 ? '<span class="hb-meta">ready when you are</span>'
+      : mc === 0 ? '<span class="hb-meta">fresh start</span>'
+        : '<span class="hb-meta">' + mc + ' this month</span>';
+  }
+  const box = restDay
+    ? '<span class="hb-chk rest" aria-hidden="true"></span>'
+    : '<button class="hb-chk' + (done ? ' on' : '') + '" aria-label="' + (done ? 'Done' : 'Mark done') +
+    '" onclick="event.stopPropagation();toggleHabit(\'' + h.id + '\')">' + (done ? ic('check', 13) : '') + '</button>';
+  return '<div class="hb-row' + (done ? ' done' : '') + (restDay ? ' rest' : '') + '" onclick="openHabitSheet(\'' + h.id + '\')">' +
+    box + '<span class="hb-ic">' + ic(h.icon || 'sprout', 17) + '</span>' +
+    '<span class="grow hb-title">' + esc(h.title) + '</span>' + status + '</div>';
+}
+function toggleHabit(id) {
+  const s = Store.get();
+  const h = (s.habits || []).find(x => x.id === id);
+  if (!h) return;
+  if (!h.log) h.log = {};
+  const t = Store.todayStr();
+  if (h.log[t]) {
+    delete h.log[t];
+    if (h.total > 0) h.total--;
+  } else {
+    h.log[t] = 1; h.total = (h.total || 0) + 1;
+    Store.touchMomentum();
+    Store.logEvent({ t: 'habit', id: h.id, title: h.title });
+    const keys = Object.keys(h.log);
+    if (keys.length > 140) { keys.sort(); keys.slice(0, keys.length - 140).forEach(k => delete h.log[k]); }
+  }
+  Store.save(); render();
+}
+
+/* add / edit sheet (re-renders itself on each change, like the focus picker) */
+function openHabitSheet(id) {
+  const s = Store.get();
+  if (id) {
+    const h = (s.habits || []).find(x => x.id === id);
+    if (!h) return;
+    const c = h.cadence || { type: 'daily' };
+    habitDraft = { id: h.id, title: h.title, icon: h.icon || 'sprout', type: c.type || 'daily', perWeek: c.perWeek || 3, days: (c.days || [0, 2, 4]).slice() };
+  } else {
+    const seed = (s.habits || []).length === 0 ? suggestDaily(s) : '';
+    habitDraft = { id: null, title: seed, icon: 'sprout', type: 'daily', perWeek: 3, days: [0, 2, 4] };
+  }
+  showHabitSheet();
+}
+function showHabitSheet() {
+  const d = habitDraft; if (!d) return;
+  const icons = HABIT_ICONS.map(n =>
+    '<button class="hb-icon' + (d.icon === n ? ' sel' : '') + '" aria-label="icon" onclick="habitPickIcon(\'' + n + '\')">' + ic(n, 18) + '</button>').join('');
+  const days = DAY_LABELS.map((lb, i) =>
+    '<button class="hb-day' + (d.days.indexOf(i) !== -1 ? ' sel' : '') + '" onclick="habitToggleDay(' + i + ')">' + lb + '</button>').join('');
+  const stepper = '<div class="hb-stepwrap"><span class="faint sm">How many times a week?</span>' +
+    '<span class="hb-step">' +
+    '<button class="hb-stepbtn" onclick="habitStep(-1)" aria-label="Fewer">−</button>' +
+    '<b>' + d.perWeek + '×</b>' +
+    '<button class="hb-stepbtn" onclick="habitStep(1)" aria-label="More">+</button></span></div>';
+  const opt = (type, label) =>
+    '<button class="hb-opt' + (d.type === type ? ' sel' : '') + '" onclick="habitPickType(\'' + type + '\')">' +
+    ic(d.type === type ? 'check' : 'square', 16) + '<span class="grow">' + label + '</span></button>';
+  overlay.innerHTML =
+    '<div class="sheet-bg" onclick="closeHabitSheet()"></div>' +
+    '<div class="sheet"><div class="sheet-grip"></div>' +
+    '<h3>' + (d.id ? 'Edit daily' : 'New daily') + '</h3>' +
+    '<div class="hb-titlerow">' + ic(d.icon, 18) +
+    '<input id="hb-title" placeholder="e.g. Move 20 minutes" value="' + esc(d.title) + '" oninput="habitDraft.title=this.value" onkeydown="if(event.key===\'Enter\')saveHabit()" /></div>' +
+    '<div class="hb-icons">' + icons + '</div>' +
+    '<div class="dur-label">How often?</div>' +
+    '<div class="hb-opts">' + opt('daily', 'Every day') + opt('weekly', 'A few times a week') + opt('days', 'Specific days') + '</div>' +
+    (d.type === 'weekly' ? stepper : '') +
+    (d.type === 'days' ? '<div class="hb-days">' + days + '</div>' : '') +
+    '<button class="cta grow mt12" onclick="saveHabit()">' + ic('check', 16) + ' Save</button>' +
+    (d.id ? '<button class="ghost danger" onclick="deleteHabit()">Delete this daily</button>' : '') +
+    '</div>';
+  overlay.classList.add('show');
+}
+function habitSyncTitle() { const el = document.getElementById('hb-title'); if (el) habitDraft.title = el.value; }
+function habitPickIcon(n) { habitSyncTitle(); habitDraft.icon = n; showHabitSheet(); }
+function habitPickType(t) { habitSyncTitle(); habitDraft.type = t; showHabitSheet(); }
+function habitToggleDay(i) { habitSyncTitle(); const k = habitDraft.days.indexOf(i); if (k === -1) habitDraft.days.push(i); else habitDraft.days.splice(k, 1); showHabitSheet(); }
+function habitStep(n) { habitSyncTitle(); habitDraft.perWeek = Math.max(1, Math.min(7, habitDraft.perWeek + n)); showHabitSheet(); }
+function closeHabitSheet() { overlay.classList.remove('show'); overlay.innerHTML = ''; habitDraft = null; }
+function saveHabit() {
+  habitSyncTitle();
+  const d = habitDraft; if (!d) return;
+  const title = (d.title || '').trim();
+  if (!title) { toast('Give your daily a name.'); return; }
+  if (d.type === 'days' && d.days.length === 0) { toast('Pick at least one day — or choose Every day.'); return; }
+  const cadence = d.type === 'weekly' ? { type: 'weekly', perWeek: d.perWeek }
+    : d.type === 'days' ? { type: 'days', days: d.days.slice().sort((a, b) => a - b) }
+      : { type: 'daily' };
+  const s = Store.get();
+  if (d.id) {
+    const h = s.habits.find(x => x.id === d.id);
+    if (h) { h.title = title; h.icon = d.icon; h.cadence = cadence; }
+  } else {
+    s.habits.push({ id: Store.uid(), title: title, icon: d.icon, cadence: cadence, log: {}, total: 0, created: Store.todayStr() });
+  }
+  Store.save(); closeHabitSheet(); render();
+  toast(d.id ? 'Updated.' : 'Added to your rhythm.');
+}
+function deleteHabit() {
+  const d = habitDraft; if (!d || !d.id) return;
+  if (!confirm('Remove this daily? Letting go is a win, not a failure.')) return;
+  const s = Store.get();
+  s.habits = s.habits.filter(x => x.id !== d.id);
+  Store.save(); closeHabitSheet(); render();
+  toast('Let go — one less thing to carry.');
+}
+
 /* ---------------- priorities (Eisenhower) ---------------- */
 function renderPriorities() {
   const s = Store.get();
@@ -741,6 +924,10 @@ function renderYou() {
     html += '<div class="insight">' + ic('sprout', 16) + '<span>You get the most done around <b>' + hourLabel(ins.sharpestHour) + '</b>.</span></div>';
   } else {
     html += '<p class="faint sm" style="margin:10px 2px 0">Patterns show up after a few days — the more you use it, the smarter your plan gets.</p>';
+  }
+  if (s.habits && s.habits.length) {
+    const kept = (s.history || []).filter(e => e.t === 'habit').length;
+    html += '<div class="insight">' + ic('activity', 16) + '<span>You\'ve kept your rhythm <b>' + kept + '</b> ' + (kept === 1 ? 'time' : 'times') + ' — every rep counts.</span></div>';
   }
   html += '</section>';
 

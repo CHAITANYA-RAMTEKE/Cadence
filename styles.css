@@ -285,3 +285,52 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-so
 .note-body { width: 100%; min-height: 52vh; border: none; resize: none; background: none; font-family: inherit;
   font-size: 15px; line-height: 1.6; color: var(--text); padding: 0; outline: none; }
 .note-body:focus { box-shadow: none; }
+
+/* ===== Daily rhythm (habits) ===== */
+.sheet { max-height: 86dvh; overflow-y: auto; }     /* keep the taller habit sheet on-screen */
+
+.rhythm { background: var(--surface-2); border-radius: var(--radius); padding: 2px 13px; }
+.rhythm-empty .cta.ghost { margin-top: 10px; }
+.rhythm-add { width: 100%; margin-top: 9px; background: none; border: none; color: var(--muted);
+  font-size: 13px; display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 6px 2px; font-family: inherit; }
+.hb-row { display: flex; align-items: center; gap: 11px; padding: 11px 1px; cursor: pointer;
+  border-bottom: 1px solid var(--border); }
+.hb-row:last-child { border-bottom: none; }
+.hb-chk { flex: none; width: 21px; height: 21px; border-radius: 50%; border: 2px solid var(--border);
+  background: none; color: #fff; display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; }
+.hb-chk.on { background: var(--teal); border-color: var(--teal); }
+.hb-chk.rest { border: 1.5px dashed var(--faint); }
+.hb-ic { flex: none; color: var(--muted); display: flex; }
+.hb-title { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hb-row.done .hb-title { color: var(--muted); }
+.hb-row.rest .hb-ic, .hb-row.rest .hb-title { color: var(--faint); }
+.hb-meta { flex: none; font-size: 12px; color: var(--faint); white-space: nowrap; }
+.hb-pill { flex: none; font-size: 12px; font-weight: 600; color: var(--teal-ink); background: var(--teal-soft);
+  padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+
+/* habit add/edit sheet */
+.hb-titlerow { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 0 12px; margin-bottom: 12px; }
+.hb-titlerow .i { flex: none; color: var(--muted); }
+.hb-titlerow input { flex: 1; border: none; background: none; padding: 12px 0; font-size: 15px;
+  color: var(--text); outline: none; font-family: inherit; }
+.hb-titlerow input:focus { box-shadow: none; }
+.hb-icons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.hb-icon { width: 42px; height: 42px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--muted); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.hb-icon.sel { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.hb-opts { display: flex; flex-direction: column; gap: 8px; }
+.hb-opt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; cursor: pointer;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; background: var(--surface);
+  color: var(--text); font-size: 14px; font-family: inherit; }
+.hb-opt .i { flex: none; color: var(--faint); }
+.hb-opt.sel { border: 2px solid var(--accent); padding: 11px; }
+.hb-opt.sel > .i { color: var(--accent); }
+.hb-stepwrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.hb-step { display: flex; align-items: center; gap: 12px; }
+.hb-stepbtn { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font-size: 17px; line-height: 1; cursor: pointer; font-family: inherit; }
+.hb-days { display: flex; gap: 6px; margin-top: 10px; }
+.hb-day { flex: 1; height: 38px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface);
+  color: var(--muted); font-size: 13px; cursor: pointer; font-family: inherit; }
+.hb-day.sel { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }

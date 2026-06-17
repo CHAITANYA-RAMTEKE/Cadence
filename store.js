@@ -33,6 +33,7 @@ const Store = (function () {
     focusMins: 25,                  // last-used focus-session length (minutes) — remembered for next time
     priorities: [],                 // [{id,title,important,urgent,done}] — Eisenhower backlog
     notes: [],                      // [{id,title,body,day,updated}] — day set => daily journal note
+    habits: [],                     // [{id,title,icon,cadence,log,total,created}] — Daily rhythm (forgiving; no streaks). today-done = log[todayStr]
     history: []                     // append-only event log — raw material for v2 (estimation, energy, insights)
   };
 
