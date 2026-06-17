@@ -1,6 +1,6 @@
 /* Cadence service worker — network-first, cache as offline fallback.
    Bump CACHE on every deploy so clients fetch fresh assets and purge the old cache. */
-const CACHE = 'cadence-2026.06.17.1737';
+const CACHE = 'cadence-2026.06.17.1759';
 const ASSETS = [
   './',
   './index.html',

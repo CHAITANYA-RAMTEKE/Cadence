@@ -8,7 +8,7 @@ let view = 'today';           // onboard | today | priorities | notes | note | f
 let onbStep = 1;
 let ob = { name: '', identity: 'getting better', sugg: '20-minute walk' };
 let comeback = null;          // {gap, parkedCount} after a break
-let timer = { id: null, total: 25 * 60, remaining: 25 * 60, handle: null, running: false };
+let timer = { id: null, total: 25 * 60, remaining: 25 * 60, handle: null, running: false, endAt: 0 };
 let inFocus = false;          // Do Not Disturb: true while a focus session is running
 let currentNoteId = null;
 let lastRenderedView = null;
@@ -454,24 +454,40 @@ function beginFocus() {
   closeFocusPicker();
   timer.id = id;
   timer.total = mins * 60; timer.remaining = mins * 60; timer.running = true;
+  timer.endAt = Date.now() + timer.total * 1000;   // wall-clock anchor: survives screen-off / tab suspend
   inFocus = true;
   view = 'focus'; render();
   startTick();
 }
 function startTick() {
   stopTick();
-  timer.handle = setInterval(() => {
-    if (timer.running && timer.remaining > 0) {
-      timer.remaining--;
-      const t = document.getElementById('timer-time');
-      const r = document.getElementById('ring-prog');
-      if (t) t.textContent = fmt(timer.remaining);
-      if (r) r.style.strokeDashoffset = ringOffset();
-      if (timer.remaining === 0) { timer.running = false; toast('Time\'s up — nice focus.'); }
-    }
-  }, 1000);
+  // The interval is only a render heartbeat — the source of truth is timer.endAt (wall clock).
+  // If the OS suspends timers while the screen is off, the next tick (or visibilitychange) snaps
+  // straight to the correct value instead of resuming from where it froze.
+  timer.handle = setInterval(syncTimer, 1000);
 }
 function stopTick() { if (timer.handle) { clearInterval(timer.handle); timer.handle = null; } }
+// Recompute remaining from the wall clock and repaint. Safe to call any time (no-op outside focus).
+function syncTimer() {
+  if (!inFocus) return;
+  if (timer.running) {
+    timer.remaining = Math.max(0, Math.ceil((timer.endAt - Date.now()) / 1000));
+    if (timer.remaining === 0) {
+      timer.running = false;
+      stopTick();
+      paintTimer();
+      toast('Time\'s up — nice focus.');
+      return;
+    }
+  }
+  paintTimer();
+}
+function paintTimer() {
+  const t = document.getElementById('timer-time');
+  const r = document.getElementById('ring-prog');
+  if (t) t.textContent = fmt(timer.remaining);
+  if (r) r.style.strokeDashoffset = ringOffset();
+}
 function fmt(sec) { return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); }
 function ringOffset() {
   const C = 2 * Math.PI * 78;
@@ -498,7 +514,18 @@ function renderFocus() {
     '<button class="cta grow" onclick="finishFocus()">' + ic('check', 16) + ' Done</button></div>' +
     '</div>';
 }
-function toggleFocusRun() { timer.running = !timer.running; render(); }
+function toggleFocusRun() {
+  if (timer.running) {
+    // Pausing: capture the true remaining from the clock, then stop counting.
+    timer.remaining = Math.max(0, Math.ceil((timer.endAt - Date.now()) / 1000));
+    timer.running = false;
+  } else {
+    // Resuming: re-anchor the end time to now + whatever's left.
+    timer.endAt = Date.now() + timer.remaining * 1000;
+    timer.running = true;
+  }
+  render();
+}
 function exitFocus() {
   const elapsed = Math.max(0, timer.total - timer.remaining);
   if (elapsed >= 20) {
@@ -1243,5 +1270,9 @@ function registerSW() {
     }
   });
 }
+
+// Keep the focus countdown honest after the screen was off/locked: recompute from the wall clock
+// the moment the page becomes visible again, rather than waiting for the next 1s heartbeat.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncTimer(); });
 
 init();
