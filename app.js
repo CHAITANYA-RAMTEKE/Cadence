@@ -241,6 +241,7 @@ function renderToday() {
       '<div class="addform">' +
       '<input id="add-focus" placeholder="Add a focus…" onkeydown="if(event.key===\'Enter\')addFocus()" />' +
       '<div class="addmeta">' +
+      '<span class="addmeta-lab">' + ic('clock', 14) + ' Time <span class="faint">(optional)</span></span>' +
       '<input id="add-time" type="time" aria-label="Time (optional)" />' +
       '<button class="add wide" onclick="addFocus()">' + ic('plus', 16) + ' Add</button>' +
       '</div></div>';
@@ -676,6 +677,39 @@ function deleteHabit() {
   toast('Let go — one less thing to carry.');
 }
 
+/* You-tab stats panel — wins shown gently (filled = did it), never a red "miss". */
+function habitLast7(h) {
+  const out = [], today = new Date(Store.todayStr() + 'T00:00:00');
+  for (let i = 6; i >= 0; i--) {
+    const x = new Date(today); x.setDate(today.getDate() - i);
+    const ds = Store.todayStr(x);
+    const rest = (h.cadence && h.cadence.type === 'days') && (h.cadence.days || []).indexOf((x.getDay() + 6) % 7) === -1;
+    out.push({ done: !!(h.log && h.log[ds]), rest: rest, today: i === 0 });
+  }
+  return out;
+}
+function habitStatRow(h) {
+  const c = h.cadence || { type: 'daily' };
+  const cadLabel = c.type === 'weekly' ? (c.perWeek || 1) + '× a week' : c.type === 'days' ? 'set days' : 'every day';
+  const headline = c.type === 'weekly' ? habitWeekCount(h) + '/' + (c.perWeek || 1) + ' this week' : habitMonthCount(h) + ' this month';
+  const dots = habitLast7(h).map(d =>
+    '<span class="dot' + (d.rest ? ' rest' : d.done ? ' on' : '') + (d.today ? ' today' : '') + '"></span>').join('');
+  return '<div class="hstat">' +
+    '<div class="hstat-top"><span class="hb-ic">' + ic(h.icon || 'sprout', 16) + '</span>' +
+    '<span class="grow hstat-title">' + esc(h.title) + '</span>' +
+    '<span class="hb-meta">' + (h.total || 0) + ' all-time</span></div>' +
+    '<div class="hstat-sub"><span class="faint sm">' + cadLabel + ' · ' + headline + '</span>' +
+    '<span class="dots">' + dots + '</span></div></div>';
+}
+function renderRhythmStats(s) {
+  const habits = s.habits || [];
+  if (!habits.length) return '';
+  const reps = habits.reduce((a, h) => a + (h.total || 0), 0);
+  return '<section class="block"><div class="block-head"><h2 class="quiet">Your dailies</h2>' +
+    '<span class="faint sm">' + reps + ' rep' + (reps === 1 ? '' : 's') + ' all-time · no misses counted</span></div>' +
+    '<div class="rhythm">' + habits.map(habitStatRow).join('') + '</div></section>';
+}
+
 /* ---------------- priorities (Eisenhower) ---------------- */
 function renderPriorities() {
   const s = Store.get();
@@ -925,11 +959,9 @@ function renderYou() {
   } else {
     html += '<p class="faint sm" style="margin:10px 2px 0">Patterns show up after a few days — the more you use it, the smarter your plan gets.</p>';
   }
-  if (s.habits && s.habits.length) {
-    const kept = (s.history || []).filter(e => e.t === 'habit').length;
-    html += '<div class="insight">' + ic('activity', 16) + '<span>You\'ve kept your rhythm <b>' + kept + '</b> ' + (kept === 1 ? 'time' : 'times') + ' — every rep counts.</span></div>';
-  }
   html += '</section>';
+
+  html += renderRhythmStats(s);
 
   html += '<section class="block"><div class="block-head"><h2 class="quiet">Parked</h2>' +
     '<span class="faint sm">no rush, ever</span></div>';

@@ -234,6 +234,8 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-so
 .addform { margin-top: 6px; }
 .addform > input { margin-bottom: 8px; }
 .addmeta { display: flex; gap: 8px; align-items: center; }
+.addmeta-lab { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; flex: none; }
+.addmeta-lab .i { color: var(--faint); }
 .addmeta input[type="time"] { width: auto; flex: 1; padding: 9px 10px; }
 .add.wide { width: auto; height: 42px; padding: 0 16px; background: var(--accent); color: #fff; border: none; gap: 6px; flex: none; }
 .rowmeta { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
@@ -334,3 +336,15 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-so
 .hb-day { flex: 1; height: 38px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface);
   color: var(--muted); font-size: 13px; cursor: pointer; font-family: inherit; }
 .hb-day.sel { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+
+/* You-tab "Your dailies" stats panel */
+.hstat { padding: 11px 1px; border-bottom: 1px solid var(--border); }
+.hstat:last-child { border-bottom: none; }
+.hstat-top { display: flex; align-items: center; gap: 10px; }
+.hstat-title { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hstat-sub { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; padding-left: 26px; }
+.dots { display: flex; gap: 5px; flex: none; }
+.dot { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--border); background: transparent; }
+.dot.on { background: var(--teal); border-color: var(--teal); }
+.dot.rest { border-style: dashed; border-color: var(--faint); }
+.dot.today { box-shadow: 0 0 0 2px var(--accent-soft); }
