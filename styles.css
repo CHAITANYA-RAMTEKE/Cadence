@@ -348,3 +348,32 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-so
 .dot.on { background: var(--teal); border-color: var(--teal); }
 .dot.rest { border-style: dashed; border-color: var(--faint); }
 .dot.today { box-shadow: 0 0 0 2px var(--accent-soft); }
+
+/* ===== UX clarity fixes: capture / profile / habit edit / note line-editor ===== */
+.padd-hint { margin: 8px 2px 4px; }
+.bonus-focus.muted { opacity: 0.45; }
+.hb-edit { flex: none; padding: 4px; margin-left: 2px; }
+
+/* expanded capture FAB */
+.cap-lab { font-size: 13px; color: var(--muted); margin: 14px 2px 9px; }
+.cap-dest { display: flex; flex-wrap: wrap; gap: 8px; }
+.cap-btn { flex: 1 1 28%; min-width: 96px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 12px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface);
+  color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.cap-btn .i { color: var(--accent); }
+.cap-btn:active { transform: scale(0.97); }
+
+/* profile edit sheet */
+.pf-lab { display: block; font-size: 13px; color: var(--muted); margin: 12px 2px 6px; }
+.pf-in { width: 100%; }
+
+/* note inline line editor (real checkboxes) */
+.note-lines { display: flex; flex-direction: column; gap: 1px; min-height: 50vh; padding-top: 4px; }
+.nl { display: flex; align-items: flex-start; gap: 9px; }
+.nl-in { flex: 1; min-width: 0; border: none; resize: none; overflow: hidden; background: none; font-family: inherit;
+  font-size: 15px; line-height: 1.6; color: var(--text); padding: 3px 0; outline: none; }
+.nl-in:focus { box-shadow: none; }
+.nl.check.done .nl-in { color: var(--muted); text-decoration: line-through; }
+.nl-box { flex: none; margin-top: 4px; width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--border);
+  background: none; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.nl-box.on { background: var(--teal); border-color: var(--teal); }

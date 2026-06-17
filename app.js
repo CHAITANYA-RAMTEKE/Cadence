@@ -110,6 +110,7 @@ function render() {
           view === 'note' ? renderNote() :
             renderToday()
   );
+  if (view === 'note') { const c = document.getElementById('note-lines'); if (c) c.querySelectorAll('.nl-in').forEach(autoGrow); }
   if (view !== lastRenderedView) { window.scrollTo(0, 0); lastRenderedView = view; }
 }
 function renderShell(inner) {
@@ -290,8 +291,8 @@ function focusRow(list, i) {
 }
 function bonusRow(i, won) {
   // Once today's focus is all done, a bonus item can be promoted into Focus (and timed) — a "bonus round".
-  const promote = (won && !i.done)
-    ? '<button class="bonus-focus" onclick="promoteBonusFocus(\'' + i.id + '\')">' + ic('play', 11) + ' Focus</button>'
+  const promote = !i.done
+    ? '<button class="bonus-focus' + (won ? '' : ' muted') + '" onclick="promoteBonusFocus(\'' + i.id + '\')">' + ic('play', 11) + ' Focus</button>'
     : '';
   return '<div class="bonusrow ' + (i.done ? 'done' : '') + '">' +
     '<button class="chk sm" aria-label="Complete" onclick="toggle(\'bonus\',\'' + i.id + '\')">' + ic('check', 13) + '</button>' +
@@ -352,14 +353,21 @@ function clearComeback() { comeback = null; render(); }
 
 /* ---------------- capture ---------------- */
 function openCapture() {
+  const dest = (tg, icon, label) =>
+    '<button class="cap-btn" onclick="capture(\'' + tg + '\')">' + ic(icon, 18) + ' ' + label + '</button>';
   overlay.innerHTML =
     '<div class="sheet-bg" onclick="closeCapture()"></div>' +
     '<div class="sheet"><div class="sheet-grip"></div>' +
     '<h3>Add anything</h3>' +
     '<input id="cap-input" placeholder="What\'s on your mind?" onkeydown="if(event.key===\'Enter\')capture(\'focus\')" />' +
-    '<div class="row gap8 mt12">' +
-    '<button class="cta grow" onclick="capture(\'focus\')">Add to focus</button>' +
-    '<button class="cta ghost grow" onclick="capture(\'bonus\')">Bonus</button></div></div>';
+    '<div class="cap-lab">Send it to…</div>' +
+    '<div class="cap-dest">' +
+    dest('focus', 'sun', 'Focus') +
+    dest('bonus', 'plus', 'Bonus') +
+    dest('priority', 'listCheck', 'Priority') +
+    dest('note', 'note', 'Note') +
+    dest('daily', 'sprout', 'Daily') +
+    '</div></div>';
   overlay.classList.add('show');
   setTimeout(() => { const el = document.getElementById('cap-input'); if (el) el.focus(); }, 50);
 }
@@ -369,14 +377,30 @@ function capture(target) {
   const t = el && el.value.trim();
   if (!t) { closeCapture(); return; }
   const s = Store.get();
-  if (target === 'focus' && s.focus.length < 3) {
-    s.focus.push({ id: Store.uid(), title: t, done: false });
-  } else {
+  if (target === 'daily') {
+    habitDraft = { id: null, title: t, icon: 'sprout', type: 'daily', perWeek: 3, days: [0, 2, 4] };
+    showHabitSheet();   // swaps the capture sheet for the cadence sheet, prefilled
+    return;
+  }
+  if (target === 'note') {
+    const n = { id: Store.uid(), title: '', body: t, day: '', updated: Date.now() };
+    s.notes.push(n); Store.save(); closeCapture();
+    currentNoteId = n.id; noteActiveLine = 0; view = 'note'; render();
+    return;
+  }
+  let dest = 'today';
+  if (target === 'priority') {
+    s.priorities.push({ id: Store.uid(), title: t, important: true, urgent: false, done: false });
+    dest = 'priorities'; toast('Added to Priorities · Plan.');
+  } else if (target === 'bonus') {
     s.bonus.push({ id: Store.uid(), title: t, done: false });
-    if (target === 'focus') toast('Focus was full — saved to Bonus.');
+    toast('Saved to Bonus.');
+  } else {
+    if (s.focus.length < 3) { s.focus.push({ id: Store.uid(), title: t, done: false }); toast('On today\'s focus.'); }
+    else { s.bonus.push({ id: Store.uid(), title: t, done: false }); toast('Focus was full — saved to Bonus.'); }
   }
   Store.save(); closeCapture();
-  if (view !== 'today') go('today'); else render();
+  if (view !== dest) go(dest); else render();
 }
 
 /* ---------------- focus / momentum mode ---------------- */
@@ -576,9 +600,11 @@ function habitRow(h) {
     ? '<span class="hb-chk rest" aria-hidden="true"></span>'
     : '<button class="hb-chk' + (done ? ' on' : '') + '" aria-label="' + (done ? 'Done' : 'Mark done') +
     '" onclick="event.stopPropagation();toggleHabit(\'' + h.id + '\')">' + (done ? ic('check', 13) : '') + '</button>';
-  return '<div class="hb-row' + (done ? ' done' : '') + (restDay ? ' rest' : '') + '" onclick="openHabitSheet(\'' + h.id + '\')">' +
+  return '<div class="hb-row' + (done ? ' done' : '') + (restDay ? ' rest' : '') + '">' +
     box + '<span class="hb-ic">' + ic(h.icon || 'sprout', 17) + '</span>' +
-    '<span class="grow hb-title">' + esc(h.title) + '</span>' + status + '</div>';
+    '<span class="grow hb-title">' + esc(h.title) + '</span>' + status +
+    '<button class="iconbtn faint hb-edit" aria-label="Edit daily" onclick="openHabitSheet(\'' + h.id + '\')">' + ic('pencil', 15) + '</button>' +
+    '</div>';
 }
 function toggleHabit(id) {
   const s = Store.get();
@@ -733,6 +759,7 @@ function renderPriorities() {
 
   html += '<div class="padd">' +
     '<input id="pri-title" placeholder="Add a priority…" onkeydown="if(event.key===\'Enter\')addPriority()" />' +
+    '<p class="faint sm padd-hint">Tap if it\'s important and/or urgent — we\'ll sort it for you.</p>' +
     '<div class="prow-toggles">' +
     '<button class="ptoggle on" data-k="important" onclick="this.classList.toggle(\'on\')">Important</button>' +
     '<button class="ptoggle" data-k="urgent" onclick="this.classList.toggle(\'on\')">Urgent</button>' +
@@ -825,7 +852,7 @@ function renderNotes() {
   html += '<button class="cta ghost" style="margin-top:12px" onclick="newNote()">' + ic('plus', 16) + ' New note</button>';
   return html;
 }
-function openNote(id) { currentNoteId = id; view = 'note'; render(); }
+function openNote(id) { currentNoteId = id; noteActiveLine = 0; view = 'note'; render(); }
 function openDailyNote() {
   const s = Store.get();
   let n = s.notes.find(x => x.day === Store.todayStr());
@@ -833,13 +860,13 @@ function openDailyNote() {
     n = { id: Store.uid(), title: '', body: '', day: Store.todayStr(), updated: Date.now() };
     s.notes.push(n); Store.save();
   }
-  currentNoteId = n.id; view = 'note'; render();
+  currentNoteId = n.id; noteActiveLine = 0; view = 'note'; render();
 }
 function newNote() {
   const s = Store.get();
   const n = { id: Store.uid(), title: '', body: '', day: '', updated: Date.now() };
   s.notes.push(n); Store.save();
-  currentNoteId = n.id; view = 'note'; render();
+  currentNoteId = n.id; noteActiveLine = 0; view = 'note'; render();
 }
 function renderNote() {
   const s = Store.get();
@@ -860,7 +887,7 @@ function renderNote() {
     '<button class="ntool" onclick="lineToPriority()">' + ic('listCheck', 15) + ' Priority</button>' +
     '<button class="ntool" onclick="toggleChecklist()">' + ic('square', 15) + ' Checklist</button>' +
     '</div>' +
-    '<textarea id="note-body" class="note-body" placeholder="Brain-dump anything…&#10;Tap a line, then send it where it belongs." oninput="saveNote()">' + esc(n.body) + '</textarea>' +
+    '<div id="note-lines" class="note-lines">' + renderNoteLines(n.body) + '</div>' +
     '</div>';
 }
 function saveNote() {
@@ -868,9 +895,9 @@ function saveNote() {
   const n = s.notes.find(x => x.id === currentNoteId);
   if (!n) return;
   const tEl = document.getElementById('note-title');
-  const bEl = document.getElementById('note-body');
   if (tEl) n.title = tEl.value;
-  if (bEl) n.body = bEl.value;
+  const body = serializeNoteLines();
+  if (body !== null) n.body = body;
   n.updated = Date.now();
   Store.save();
 }
@@ -892,11 +919,103 @@ function deleteNote() {
   Store.save();
   currentNoteId = null; view = 'notes'; render(); toast('Note deleted.');
 }
-function curLine(ta) {
-  const v = ta.value, pos = ta.selectionStart;
-  const start = v.lastIndexOf('\n', pos - 1) + 1;
-  let end = v.indexOf('\n', pos); if (end === -1) end = v.length;
-  return { v: v, start: start, end: end, text: v.slice(start, end) };
+/* --- inline line editor: real tappable checkboxes · Enter = new line · Backspace = merge --- */
+let noteActiveLine = 0;
+const NOTE_CHECK_RE = /^\[([ xX])\]\s?(.*)$/;
+function renderNoteLines(body) {
+  let lines = (body || '').split('\n');
+  if (!lines.length) lines = [''];
+  return lines.map(noteLineHTML).join('');
+}
+function noteLineHTML(ln, i) {
+  const m = ln.match(NOTE_CHECK_RE);
+  if (m) {
+    const on = m[1].toLowerCase() === 'x';
+    return '<div class="nl check' + (on ? ' done' : '') + '" data-i="' + i + '">' +
+      '<button class="nl-box' + (on ? ' on' : '') + '" aria-label="Toggle item" onclick="noteToggleBox(' + i + ')">' + (on ? ic('check', 12) : '') + '</button>' +
+      '<textarea rows="1" class="nl-in" data-i="' + i + '" oninput="noteLineInput(this)" onkeydown="noteLineKey(event,' + i + ')" onfocus="noteActiveLine=' + i + '">' + esc(m[2]) + '</textarea></div>';
+  }
+  return '<div class="nl" data-i="' + i + '">' +
+    '<textarea rows="1" class="nl-in" data-i="' + i + '"' + (i === 0 ? ' placeholder="Write anything… ⏎ for a new line"' : '') +
+    ' oninput="noteLineInput(this)" onkeydown="noteLineKey(event,' + i + ')" onfocus="noteActiveLine=' + i + '">' + esc(ln) + '</textarea></div>';
+}
+function autoGrow(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+function serializeNoteLines() {
+  const cont = document.getElementById('note-lines');
+  if (!cont) return null;
+  const out = [];
+  cont.querySelectorAll('.nl').forEach(function (r) {
+    const ta = r.querySelector('.nl-in');
+    const txt = ta ? ta.value : '';
+    out.push(r.classList.contains('check') ? ((r.classList.contains('done') ? '[x] ' : '[ ] ') + txt) : txt);
+  });
+  return out.join('\n');
+}
+function noteLineInput(ta) {
+  if (ta.value.indexOf('\n') >= 0) ta.value = ta.value.replace(/\n+/g, ' ');
+  autoGrow(ta);
+  saveNote();
+}
+function noteBodyLines() { const n = Store.get().notes.find(x => x.id === currentNoteId); return n ? (n.body || '').split('\n') : ['']; }
+function setNoteBody(lines) {
+  const n = Store.get().notes.find(x => x.id === currentNoteId);
+  if (n) { n.body = lines.join('\n'); n.updated = Date.now(); Store.save(); }
+}
+function lineText(ln) { const m = ln.match(NOTE_CHECK_RE); return m ? m[2] : ln; }
+function linePrefix(ln) { const m = ln.match(NOTE_CHECK_RE); return m ? (m[1].toLowerCase() === 'x' ? '[x] ' : '[ ] ') : ''; }
+function rerenderNoteLines(focusIdx, caretPos) {
+  const cont = document.getElementById('note-lines');
+  const n = Store.get().notes.find(x => x.id === currentNoteId);
+  if (!cont || !n) return;
+  cont.innerHTML = renderNoteLines(n.body);
+  cont.querySelectorAll('.nl-in').forEach(autoGrow);
+  if (focusIdx != null) {
+    const el = cont.querySelector('.nl-in[data-i="' + focusIdx + '"]');
+    if (el) { el.focus(); const p = caretPos == null ? el.value.length : caretPos; try { el.setSelectionRange(p, p); } catch (e) {} noteActiveLine = focusIdx; }
+  }
+}
+function noteLineKey(e, i) {
+  const ta = e.target;
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    saveNote();
+    const lines = noteBodyLines();
+    const caret = ta.selectionStart;
+    const before = ta.value.slice(0, caret), after = ta.value.slice(caret);
+    const pre = linePrefix(lines[i] || '');
+    lines[i] = pre + before;
+    lines.splice(i + 1, 0, pre + after);   // a new line inherits checklist-ness
+    setNoteBody(lines);
+    rerenderNoteLines(i + 1, 0);
+  } else if (e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0 && i > 0) {
+    e.preventDefault();
+    saveNote();
+    const lines = noteBodyLines();
+    const prevText = lineText(lines[i - 1]);
+    const mergePos = prevText.length;
+    lines[i - 1] = linePrefix(lines[i - 1]) + prevText + lineText(lines[i]);
+    lines.splice(i, 1);
+    setNoteBody(lines);
+    rerenderNoteLines(i - 1, mergePos);
+  }
+}
+function noteToggleBox(i) {
+  saveNote();
+  const lines = noteBodyLines();
+  const m = lines[i] && lines[i].match(NOTE_CHECK_RE);
+  if (!m) return;
+  lines[i] = (m[1].toLowerCase() === 'x' ? '[ ] ' : '[x] ') + m[2];
+  setNoteBody(lines);
+  rerenderNoteLines(null);
+}
+function toggleChecklist() {
+  saveNote();
+  const lines = noteBodyLines();
+  let i = noteActiveLine; if (i == null || i < 0 || i >= lines.length) i = lines.length - 1;
+  const m = lines[i].match(NOTE_CHECK_RE);
+  lines[i] = m ? m[2] : ('[ ] ' + lines[i]);
+  setNoteBody(lines);
+  rerenderNoteLines(i, null);
 }
 function addToFocusOrBonus(text) {
   const s = Store.get();
@@ -908,27 +1027,21 @@ function addToFocusOrBonus(text) {
     Store.save(); toast('Focus was full — sent to Bonus.');
   }
 }
+function activeLineText() {
+  const lines = noteBodyLines();
+  let i = noteActiveLine; if (i == null || i < 0 || i >= lines.length) return '';
+  return lineText(lines[i]).trim();
+}
 function lineToFocus() {
-  const ta = document.getElementById('note-body'); if (!ta) return;
-  const text = curLine(ta).text.replace(/^\[[ xX]\]\s*/, '').trim();
-  if (!text) { toast('Put your cursor on a line with text.'); return; }
+  const text = activeLineText();
+  if (!text) { toast('Tap a line with text first.'); return; }
   addToFocusOrBonus(text);
 }
 function lineToPriority() {
-  const ta = document.getElementById('note-body'); if (!ta) return;
-  const text = curLine(ta).text.replace(/^\[[ xX]\]\s*/, '').trim();
-  if (!text) { toast('Put your cursor on a line with text.'); return; }
+  const text = activeLineText();
+  if (!text) { toast('Tap a line with text first.'); return; }
   Store.get().priorities.push({ id: Store.uid(), title: text, important: true, urgent: false, done: false });
-  Store.save(); toast('Added to Priorities (Plan).');
-}
-function toggleChecklist() {
-  const ta = document.getElementById('note-body'); if (!ta) return;
-  const l = curLine(ta);
-  const nl = /^\[[ xX]\]\s/.test(l.text) ? l.text.replace(/^\[[ xX]\]\s/, '') : '[ ] ' + l.text;
-  ta.value = l.v.slice(0, l.start) + nl + l.v.slice(l.end);
-  const pos = l.start + nl.length;
-  ta.setSelectionRange(pos, pos); ta.focus();
-  saveNote();
+  Store.save(); toast('Added to Priorities · Plan.');
 }
 
 /* ---------------- you ---------------- */
@@ -1037,13 +1150,29 @@ function statCard(label, val) {
 }
 function editProfile() {
   const s = Store.get();
-  const name = prompt('What should I call you?', s.name || '');
-  if (name === null) return;
-  const goal = prompt('What are you working toward?', s.identity || '');
-  Store.set({ name: name.trim() || s.name, identity: (goal || '').trim() || s.identity });
-  render();
-  toast('Updated.');
+  const goalVal = s.identity === 'getting better' ? '' : s.identity;
+  overlay.innerHTML =
+    '<div class="sheet-bg" onclick="closeProfileSheet()"></div>' +
+    '<div class="sheet"><div class="sheet-grip"></div>' +
+    '<h3>Your profile</h3>' +
+    '<label class="pf-lab">What should I call you? <span class="faint">(optional)</span></label>' +
+    '<input id="pf-name" class="pf-in" placeholder="Your name" value="' + esc(s.name) + '" />' +
+    '<label class="pf-lab">What are you working toward? <span class="faint">(optional)</span></label>' +
+    '<input id="pf-goal" class="pf-in" placeholder="e.g. getting fit" value="' + esc(goalVal) + '" onkeydown="if(event.key===\'Enter\')saveProfile()" />' +
+    '<button class="cta grow mt12" onclick="saveProfile()">Save</button>' +
+    '</div>';
+  overlay.classList.add('show');
+  setTimeout(() => { const el = document.getElementById('pf-name'); if (el) el.focus(); }, 50);
 }
+function saveProfile() {
+  const nmEl = document.getElementById('pf-name');
+  const glEl = document.getElementById('pf-goal');
+  const name = nmEl ? nmEl.value.trim() : '';
+  const goal = glEl ? glEl.value.trim() : '';
+  Store.set({ name: name, identity: goal || 'getting better' });
+  closeProfileSheet(); render(); toast('Saved.');
+}
+function closeProfileSheet() { overlay.classList.remove('show'); overlay.innerHTML = ''; }
 function confirmReset() {
   if (confirm('Reset all your data and start fresh? This can\'t be undone.')) {
     Store.reset(); comeback = null; view = 'onboard'; onbStep = 1; render();
