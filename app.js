@@ -6,7 +6,7 @@ const toastEl = document.getElementById('toast');
 
 let view = 'today';           // onboard | today | priorities | notes | note | focus | you
 let onbStep = 1;
-let ob = { name: '', identity: 'getting better', sugg: '20-minute walk' };
+let ob = { name: '', identity: 'getting better', sugg: '20-minute walk', windDown: null };
 let comeback = null;          // {gap, parkedCount} after a break
 let timer = { id: null, total: 25 * 60, remaining: 25 * 60, handle: null, running: false, endAt: 0 };
 let inFocus = false;          // Do Not Disturb: true while a focus session is running
@@ -136,7 +136,7 @@ function go(v) {
 
 /* ---------------- onboarding ---------------- */
 function renderOnboard() {
-  const dots = [1, 2, 3, 4, 5].map(n =>
+  const dots = [1, 2, 3, 4, 5, 6].map(n =>
     '<span class="' + (n === onbStep ? 'on' : '') + '"></span>').join('');
   let body = '';
   if (onbStep === 1) {
@@ -172,6 +172,22 @@ function renderOnboard() {
       '<h2>Each day, pick just 1–3 things that matter</h2>' +
       '<p class="muted">Do those, and you\'ve <b class="teal">won the day.</b> Everything else is a bonus — never a debt.</p>' +
       '<button class="cta mt-auto" onclick="obNext(5)">Got it</button></div>';
+  } else if (onbStep === 5) {
+    body =
+      '<div class="ob">' +
+      '<h2>When\'s your usual bedtime?</h2>' +
+      '<p class="muted sm">I\'ll show a gentle “time left today,” measured to your bedtime — calm awareness, never a countdown to stress over. Totally optional.</p>' +
+      '<div class="wind-opts">' +
+      '<button class="wind-chip" onclick="obWind(\'21:00\')">9:00 PM</button>' +
+      '<button class="wind-chip" onclick="obWind(\'22:00\')">10:00 PM</button>' +
+      '<button class="wind-chip" onclick="obWind(\'23:00\')">11:00 PM</button>' +
+      '<button class="wind-chip" onclick="obWind(\'00:00\')">12:00 AM</button>' +
+      '</div>' +
+      '<div class="wind-custom"><span class="addmeta-lab">' + ic('clock', 14) + ' Custom</span>' +
+      '<input id="ob-wind" type="time" aria-label="Custom bedtime" />' +
+      '<button class="add" onclick="obWindCustom()">Use</button></div>' +
+      '<button class="ghost" onclick="obWind(null)">No specific time — keep it off</button>' +
+      '</div>';
   } else {
     body =
       '<div class="ob">' +
@@ -180,7 +196,7 @@ function renderOnboard() {
       '<div class="vote">' + ic('heart', 16) + ' A vote for <b>' + esc(ob.identity) + '</b></div>' +
       '<button class="cta" onclick="obFinish()">Add &amp; see my day</button></div>';
   }
-  return '<div class="onboard">' + (onbStep < 6 ? '<div class="dots">' + dots + '</div>' : '') + body + '</div>';
+  return '<div class="onboard">' + (onbStep <= 6 ? '<div class="dots">' + dots + '</div>' : '') + body + '</div>';
 }
 function obNext(n) { onbStep = n; render(); }
 function obName(skip) {
@@ -189,12 +205,15 @@ function obName(skip) {
   onbStep = 3; render();
 }
 function obIdentity(id, sugg) { ob.identity = id; ob.sugg = sugg; onbStep = 4; render(); }
+function obWind(v) { ob.windDown = v || null; onbStep = 6; render(); }
+function obWindCustom() { const el = document.getElementById('ob-wind'); ob.windDown = (el && el.value) || null; onbStep = 6; render(); }
 function obFinish() {
   const el = document.getElementById('ob-first');
   const first = el && el.value.trim();
   const t = Store.todayStr();
   Store.set({
     onboarded: true, name: ob.name, identity: ob.identity || 'getting better',
+    windDownTime: ob.windDown || null,
     momentum: 1, lastMomentumDate: t, currentDate: t, lastActiveDate: t,
     focus: first ? [{ id: Store.uid(), title: first, done: false }] : []
   });
@@ -229,6 +248,8 @@ function renderToday() {
       '<div class="banner win pop">' + ic('party', 22) +
       '<div><b>You won today</b><div class="sm">Rest is part of it. See you tomorrow.</div></div></div>';
   }
+
+  html += renderRunway(s, allDone);
 
   html += '<section class="block"><div class="block-head"><h2>Today\'s focus</h2>' +
     '<span class="faint sm">1–3 things that matter</span></div>';
@@ -272,6 +293,64 @@ function renderToday() {
 
   html += '<p class="footnote">Do your focus and today\'s a win.</p>';
   return html;
+}
+
+/* ---------------- day's runway (opt-in, calm time-left until wind-down) ----------------
+   Wall-clock based, like the focus timer: time-left is derived from Date.now() and re-synced
+   on resume, never counted down — so it can't freeze when the screen sleeps. */
+function bedtimeDate(hhmm) {
+  const parts = String(hhmm).split(':');
+  const h = parseInt(parts[0], 10) || 0, m = parseInt(parts[1], 10) || 0;
+  const bed = new Date(); bed.setHours(h, m, 0, 0);
+  // A post-midnight wind-down (12–5 AM) refers to tonight, not this morning.
+  if (bed.getTime() <= Date.now() && h < 6) bed.setDate(bed.getDate() + 1);
+  return bed;
+}
+function fmtDur(min) {
+  const h = Math.floor(min / 60), m = min % 60;
+  return h <= 0 ? m + 'm' : (m === 0 ? h + 'h' : h + 'h ' + m + 'm');
+}
+function fmtClock(d) {
+  let h = d.getHours(); const m = d.getMinutes();
+  const ap = h < 12 ? 'AM' : 'PM'; let hr = h % 12; if (hr === 0) hr = 12;
+  return hr + ':' + String(m).padStart(2, '0') + ' ' + ap;
+}
+function renderRunway(s, allDone) {
+  if (!s.windDownTime || s.onBreak) return '';   // opt-in only, and never during a break
+  const bed = bedtimeDate(s.windDownTime);
+  const remMs = bed.getTime() - Date.now();
+  if (remMs <= 0) {
+    return '<div class="card runway rest" id="runway">' +
+      '<div class="runway-head">' + ic('moon', 16) + '<span>Past your bedtime</span></div>' +
+      '<div class="runway-msg">Rest easy — today\'s done, and tomorrow\'s a clean page.</div></div>';
+  }
+  const remMin = Math.max(1, Math.round(remMs / 60000));
+  const windowMs = 16 * 3600 * 1000;             // ~waking day, only for the bar's proportion
+  const frac = Math.max(0.03, Math.min(1, remMs / windowMs));
+  const wake = new Date(bed.getTime() - windowMs);
+  let msg;
+  if (allDone) msg = 'Day\'s already won — the rest is yours, to enjoy or to rest.';
+  else if (remMin >= 120) msg = 'Plenty of time — your focus fits easily.';
+  else if (remMin >= 30) msg = 'A good window left. One focus at a time.';
+  else msg = 'Almost wind-down — a small thing, or call it a day. Both win.';
+  return '<div class="card runway" id="runway">' +
+    '<div class="runway-head">' + ic('sun', 16) + '<span>Your day\'s runway</span></div>' +
+    '<div class="runway-num"><b>' + fmtDur(remMin) + '</b><span class="sm muted">left before bed</span></div>' +
+    '<div class="runway-bar"><div class="runway-fill" style="width:' + Math.round(frac * 100) + '%"></div></div>' +
+    '<div class="runway-ends"><span>' + fmtClock(wake) + '</span><span>' + fmtClock(bed) + '</span></div>' +
+    '<div class="runway-msg">' + msg + '</div>' +
+    '</div>';
+}
+// Update only the runway card in place, so a resume/refresh never disturbs inputs elsewhere on Today.
+function refreshRunway() {
+  if (view !== 'today') return;
+  const el = document.getElementById('runway');
+  if (!el) return;
+  const s = Store.get();
+  const wrap = document.createElement('div');
+  wrap.innerHTML = renderRunway(s, s.focus.length > 0 && s.focus.every(i => i.done));
+  const fresh = wrap.firstElementChild;
+  if (fresh) el.replaceWith(fresh); else el.remove();
 }
 
 function sortedFocus(arr) {
@@ -1120,6 +1199,8 @@ function renderYou() {
     '<div class="grow"><b>' + (s.onBreak ? 'You\'re on a break' : 'Take a break') + '</b>' +
     '<div class="sm muted">' + (s.onBreak ? 'Rest as long as you like. Tap to come back.' : 'Pause guilt-free. Nothing piles up.') + '</div></div></button>';
 
+  html += renderRunwaySetting(s);
+
   html += '<section class="block"><div class="block-head"><h2 class="quiet">Your data</h2>' +
     '<span class="faint sm">yours, always</span></div>' +
     '<div class="row gap8">' +
@@ -1148,6 +1229,30 @@ function forget(id) {
   toast('Let go. That\'s a win too.');
 }
 function toggleBreak() { const s = Store.get(); Store.set({ onBreak: !s.onBreak }); render(); }
+function renderRunwaySetting(s) {
+  const on = !!s.windDownTime;
+  return '<section class="block"><div class="block-head"><h2 class="quiet">Day\'s runway</h2>' +
+    '<span class="faint sm">a calm time-left — off or on</span></div>' +
+    '<div class="card">' +
+    '<div class="row gap8" style="flex-wrap:wrap">' +
+    '<span class="addmeta-lab">' + ic('sun', 14) + ' Bedtime</span>' +
+    '<input id="set-wind" type="time" value="' + (s.windDownTime || '') + '" />' +
+    '<button class="add" onclick="saveWind()">Save</button>' +
+    (on ? '<button class="link" onclick="clearWind()">Turn off</button>' : '') +
+    '</div>' +
+    '<p class="faint sm" style="margin:10px 2px 0">' + (on
+      ? 'Showing time left until ' + fmtTime(s.windDownTime) + ' on Today. Change anytime, or turn it off.'
+      : 'Off. Set a time to see a gentle “time left today” on Today — never a guilt countdown.') + '</p>' +
+    '</div></section>';
+}
+function saveWind() {
+  const el = document.getElementById('set-wind');
+  const v = el && el.value;
+  if (!v) { toast('Pick a time first — or leave it off.'); return; }
+  Store.set({ windDownTime: v }); render();
+  toast('Runway set to ' + fmtTime(v) + '.');
+}
+function clearWind() { Store.set({ windDownTime: null }); render(); toast('Runway off — your call, always.'); }
 
 function computeInsights() {
   const h = Store.get().history || [];
@@ -1273,6 +1378,10 @@ function registerSW() {
 
 // Keep the focus countdown honest after the screen was off/locked: recompute from the wall clock
 // the moment the page becomes visible again, rather than waiting for the next 1s heartbeat.
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncTimer(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { syncTimer(); refreshRunway(); }
+});
+// Keep the day's-runway readout honest while the app sits idle (wall-clock, same lesson as the timer).
+setInterval(refreshRunway, 60000);
 
 init();

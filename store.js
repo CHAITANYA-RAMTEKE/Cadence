@@ -26,6 +26,7 @@ const Store = (function () {
     lastMomentumDate: null,
     currentDate: null,              // the date today's focus/bonus belong to
     lastActiveDate: null,
+    windDownTime: null,             // "HH:MM" bedtime for the opt-in day's-runway banner; null = off
     focus: [],                      // [{id,title,done}] — max 3
     bonus: [],                      // [{id,title,done}]
     parked: [],                     // [{id,title}] — never shoved at you
