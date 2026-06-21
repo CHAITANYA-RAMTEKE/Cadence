@@ -19,6 +19,7 @@ const Store = (function () {
 
   const defaults = {
     onboarded: false,
+    tourSeen: false,                // first-run feature walkthrough shown once
     name: '',                       // what to call them, e.g. "Chaitanya"
     identity: 'getting better',     // their aspiration, e.g. "getting fit"
     persona: '',

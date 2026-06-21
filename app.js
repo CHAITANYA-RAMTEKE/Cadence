@@ -96,6 +96,7 @@ function init() {
     view = 'today';
   }
   render();
+  maybeStartTour();
   registerSW();
 }
 
@@ -170,7 +171,7 @@ function renderOnboard() {
       '<div class="ob center">' +
       '<div class="row gap8 mb16"><span class="num">1</span><span class="num">2</span><span class="num">3</span></div>' +
       '<h2>Each day, pick just 1–3 things that matter</h2>' +
-      '<p class="muted">Do those, and you\'ve <b class="teal">won the day.</b> Everything else is a bonus — never a debt.</p>' +
+      '<p class="muted">Clear those and you\'re <b style="color:var(--accent)">rolling</b> — then stack as much extra as you\'ve got. It\'s all momentum, never a debt.</p>' +
       '<button class="cta mt-auto" onclick="obNext(5)">Got it</button></div>';
   } else if (onbStep === 5) {
     body =
@@ -196,9 +197,13 @@ function renderOnboard() {
       '<div class="vote">' + ic('heart', 16) + ' A vote for <b>' + esc(ob.identity) + '</b></div>' +
       '<button class="cta" onclick="obFinish()">Add &amp; see my day</button></div>';
   }
-  return '<div class="onboard">' + (onbStep <= 6 ? '<div class="dots">' + dots + '</div>' : '') + body + '</div>';
+  const back = (onbStep > 1 && onbStep <= 6)
+    ? '<button class="ob-back iconbtn" aria-label="Back" onclick="obBack()">' + ic('back', 22) + '</button>'
+    : '';
+  return '<div class="onboard">' + back + (onbStep <= 6 ? '<div class="dots">' + dots + '</div>' : '') + body + '</div>';
 }
 function obNext(n) { onbStep = n; render(); }
+function obBack() { if (onbStep > 1) { onbStep -= 1; render(); } }
 function obName(skip) {
   if (!skip) { const el = document.getElementById('ob-name'); ob.name = (el && el.value.trim()) || ''; }
   else { ob.name = ''; }
@@ -218,7 +223,8 @@ function obFinish() {
     focus: first ? [{ id: Store.uid(), title: first, done: false }] : []
   });
   view = 'today'; render();
-  toast((ob.name ? 'You\'re set, ' + ob.name + '. ' : 'You\'re set. ') + 'Today\'s already a win waiting.');
+  toast((ob.name ? 'You\'re set, ' + ob.name + '. ' : 'You\'re set. ') + 'Let\'s build some momentum.');
+  maybeStartTour();
 }
 
 /* ---------------- today ---------------- */
@@ -231,7 +237,7 @@ function renderToday() {
     '<header class="head"><div>' +
     '<div class="muted sm">' + esc(prettyDate()) + '</div>' +
     '<h1>' + greeting() + (s.name ? ', ' + esc(s.name) : '') + '</h1></div>' +
-    '<span class="pill">' + ic('sprout', 14) + ' Day ' + s.momentum + '</span></header>';
+    '<button class="pill" onclick="go(\'you\')" aria-label="Momentum: ' + s.momentum + ' days. A gap never resets it — tap for details.">' + ic('sprout', 14) + ' Day ' + s.momentum + '</button></header>';
 
   if (comeback) {
     html +=
@@ -244,9 +250,11 @@ function renderToday() {
   }
 
   if (allDone) {
+    const fdone = s.focus.filter(i => i.done).length;
     html +=
-      '<div class="banner win pop">' + ic('party', 22) +
-      '<div><b>You won today</b><div class="sm">Rest is part of it. See you tomorrow.</div></div></div>';
+      '<div class="banner go pop">' + ic('bolt', 22) +
+      '<div><b>' + fdone + ' down — and you\'re just warming up.</b>' +
+      '<div class="sm">Momentum\'s the goal, not a finish line. Add another focus or stack a bonus.</div></div></div>';
   }
 
   html += renderRunway(s, allDone);
@@ -254,7 +262,7 @@ function renderToday() {
   html += '<section class="block"><div class="block-head"><h2>Today\'s focus</h2>' +
     '<span class="faint sm">1–3 things that matter</span></div>';
   if (s.focus.length === 0) {
-    html += '<p class="empty">Pick the one or two things that would make today a win.</p>';
+    html += '<p class="empty">Pick the one or two things you most want to move today.</p>';
   } else {
     html += sortedFocus(s.focus).map(i => focusRow('focus', i)).join('');
   }
@@ -263,7 +271,7 @@ function renderToday() {
       '<div class="addform">' +
       '<input id="add-focus" placeholder="Add a focus…" onkeydown="if(event.key===\'Enter\')addFocus()" />' +
       '<div class="addmeta">' +
-      '<span class="addmeta-lab">' + ic('clock', 14) + ' Time <span class="faint">(optional)</span></span>' +
+      '<span class="addmeta-lab">' + ic('clock', 14) + ' Time <span class="faint">(optional · sets order)</span></span>' +
       '<input id="add-time" type="time" aria-label="Time (optional)" />' +
       '<button class="add wide" onclick="addFocus()">' + ic('plus', 16) + ' Add</button>' +
       '</div></div>';
@@ -275,7 +283,7 @@ function renderToday() {
   html += '<section class="block"><div class="block-head"><h2 class="quiet">Bonus</h2>' +
     '<span class="faint sm">only if you have energy</span></div>';
   if (allDone && s.bonus.some(i => !i.done)) {
-    html += '<p class="bonus-hint">' + ic('party', 13) + ' Day\'s already won — give a bonus your focus only if you feel like it.</p>';
+    html += '<p class="bonus-hint">' + ic('bolt', 13) + ' Focus is clear — this is the time to stack a bonus. Tap Focus to make it count.</p>';
   }
   if (s.bonus.length === 0) {
     html += '<p class="empty sm">Nothing here — and that\'s fine.</p>';
@@ -291,7 +299,7 @@ function renderToday() {
       '<span class="faint">›</span></button>';
   }
 
-  html += '<p class="footnote">Do your focus and today\'s a win.</p>';
+  html += '<p class="footnote">Knock out your focus, then keep stacking — there\'s always a next rep.</p>';
   return html;
 }
 
@@ -329,10 +337,10 @@ function renderRunway(s, allDone) {
   const frac = Math.max(0.03, Math.min(1, remMs / windowMs));
   const wake = new Date(bed.getTime() - windowMs);
   let msg;
-  if (allDone) msg = 'Day\'s already won — the rest is yours, to enjoy or to rest.';
+  if (allDone) msg = 'Focus cleared — and there\'s still runway on the clock. Put it to use.';
   else if (remMin >= 120) msg = 'Plenty of time — your focus fits easily.';
   else if (remMin >= 30) msg = 'A good window left. One focus at a time.';
-  else msg = 'Almost wind-down — a small thing, or call it a day. Both win.';
+  else msg = 'Almost wind-down — still time to squeeze in one small rep.';
   return '<div class="card runway" id="runway">' +
     '<div class="runway-head">' + ic('sun', 16) + '<span>Your day\'s runway</span></div>' +
     '<div class="runway-num"><b>' + fmtDur(remMin) + '</b><span class="sm muted">left before bed</span></div>' +
@@ -365,8 +373,47 @@ function focusRow(list, i) {
   return '<div class="card focusrow ' + (i.done ? 'done' : '') + '">' +
     '<button class="chk" aria-label="Complete" onclick="toggle(\'' + list + '\',\'' + i.id + '\')">' + ic('check', 15) + '</button>' +
     '<div class="grow"><div class="title">' + esc(i.title) + '</div>' + meta + '</div>' +
+    '<button class="iconbtn faint fe-edit" aria-label="Edit focus" onclick="openFocusEdit(\'' + i.id + '\')">' + ic('pencil', 16) + '</button>' +
     (i.done ? '' : '<button class="start" onclick="startFocus(\'' + i.id + '\')">' + ic('play', 13) + ' Start</button>') +
     '</div>';
+}
+/* edit / remove a focus item — same sheet pattern as Daily rhythm + the duration picker */
+let focusEditId = null;
+function openFocusEdit(id) {
+  const it = Store.get().focus.find(x => x.id === id);
+  if (!it) return;
+  focusEditId = id;
+  overlay.innerHTML =
+    '<div class="sheet-bg" onclick="closeFocusEdit()"></div>' +
+    '<div class="sheet"><div class="sheet-grip"></div>' +
+    '<h3>Edit focus</h3>' +
+    '<input id="fe-title" placeholder="What\'s the focus?" value="' + esc(it.title) + '" onkeydown="if(event.key===\'Enter\')saveFocusEdit()" />' +
+    '<div class="addmeta" style="margin-top:12px">' +
+    '<span class="addmeta-lab">' + ic('clock', 14) + ' Time <span class="faint">(optional · sets order)</span></span>' +
+    '<input id="fe-time" type="time" value="' + (it.time || '') + '" aria-label="Time (optional)" />' +
+    '</div>' +
+    '<button class="cta grow mt12" onclick="saveFocusEdit()">' + ic('check', 16) + ' Save</button>' +
+    '<button class="ghost danger" onclick="deleteFocusItem()">Take it off today</button>' +
+    '</div>';
+  overlay.classList.add('show');
+  setTimeout(() => { const el = document.getElementById('fe-title'); if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {} } }, 50);
+}
+function closeFocusEdit() { overlay.classList.remove('show'); overlay.innerHTML = ''; focusEditId = null; }
+function saveFocusEdit() {
+  const it = Store.get().focus.find(x => x.id === focusEditId);
+  if (!it) { closeFocusEdit(); return; }
+  const tEl = document.getElementById('fe-title');
+  const title = tEl ? tEl.value.trim() : '';
+  if (!title) { toast('Give your focus a name — or take it off today.'); return; }
+  const tmEl = document.getElementById('fe-time');
+  it.title = title;
+  it.time = (tmEl && tmEl.value) || '';
+  Store.save(); closeFocusEdit(); render(); toast('Updated.');
+}
+function deleteFocusItem() {
+  const s = Store.get();
+  s.focus = s.focus.filter(x => x.id !== focusEditId);
+  Store.save(); closeFocusEdit(); render(); toast('Taken off today — no harm done.');
 }
 function bonusRow(i, won) {
   // Once today's focus is all done, a bonus item can be promoted into Focus (and timed) — a "bonus round".
@@ -579,7 +626,7 @@ function renderFocus() {
   const C = (2 * Math.PI * 78).toFixed(1);
   return '<div class="focusview">' +
     '<button class="iconbtn back" aria-label="Back" onclick="exitFocus()">' + ic('back', 22) + '</button>' +
-    '<div class="dnd">' + ic('moon', 14) + ' Do Not Disturb · notifications paused</div>' +
+    '<div class="dnd">' + ic('bolt', 14) + ' Focus mode · one thing, all the way through</div>' +
     '<div class="ring-wrap"><svg viewBox="0 0 180 180" width="200" height="200">' +
     '<circle cx="90" cy="90" r="78" class="ring-bg"/>' +
     '<circle id="ring-prog" cx="90" cy="90" r="78" class="ring-fg" transform="rotate(-90 90 90)" ' +
@@ -706,10 +753,11 @@ function habitRow(h) {
     ? '<span class="hb-chk rest" aria-hidden="true"></span>'
     : '<button class="hb-chk' + (done ? ' on' : '') + '" aria-label="' + (done ? 'Done' : 'Mark done') +
     '" onclick="event.stopPropagation();toggleHabit(\'' + h.id + '\')">' + (done ? ic('check', 13) : '') + '</button>';
-  return '<div class="hb-row' + (done ? ' done' : '') + (restDay ? ' rest' : '') + '">' +
+  const rowClick = restDay ? '' : ' onclick="toggleHabit(\'' + h.id + '\')"';
+  return '<div class="hb-row' + (done ? ' done' : '') + (restDay ? ' rest' : '') + '"' + rowClick + '>' +
     box + '<span class="hb-ic">' + ic(h.icon || 'sprout', 17) + '</span>' +
     '<span class="grow hb-title">' + esc(h.title) + '</span>' + status +
-    '<button class="iconbtn faint hb-edit" aria-label="Edit daily" onclick="openHabitSheet(\'' + h.id + '\')">' + ic('pencil', 15) + '</button>' +
+    '<button class="iconbtn faint hb-edit" aria-label="Edit daily" onclick="event.stopPropagation();openHabitSheet(\'' + h.id + '\')">' + ic('pencil', 15) + '</button>' +
     '</div>';
 }
 function toggleHabit(id) {
@@ -1171,7 +1219,7 @@ function renderYou() {
     '<div class="stats3">' +
     statCard('Things done', ins.done) +
     statCard('Focused', fmtMin(ins.focusedMin)) +
-    statCard('Days won', ins.daysWon) +
+    statCard('Days cleared', ins.daysWon) +
     '</div>';
   if (ins.done >= 3 && ins.sharpestHour != null) {
     html += '<div class="insight">' + ic('sprout', 16) + '<span>You get the most done around <b>' + hourLabel(ins.sharpestHour) + '</b>.</span></div>';
@@ -1208,6 +1256,7 @@ function renderYou() {
     '<button class="cta ghost grow" onclick="importData()">Restore</button></div>' +
     '<p class="faint sm" style="margin:10px 2px 0">Saves a JSON file with everything — including the quiet history that powers future features. Stored only on this device.</p></section>';
 
+  html += '<button class="ghost" onclick="startTour()">Replay the walkthrough</button>';
   html += '<button class="ghost danger" onclick="confirmReset()">Reset everything</button>';
   html += '<p class="footnote">Cadence v1 · made to be kind.' + (self.CADENCE_VERSION ? ' · ' + self.CADENCE_VERSION : '') + '</p>';
   return html;
@@ -1217,10 +1266,11 @@ function restore(id) {
   const it = s.parked.find(x => x.id === id);
   if (!it) return;
   s.parked = s.parked.filter(x => x.id !== id);
-  if (s.focus.length < 3) s.focus.push({ id: Store.uid(), title: it.title, done: false });
+  const toFocus = s.focus.length < 3;
+  if (toFocus) s.focus.push({ id: Store.uid(), title: it.title, done: false });
   else s.bonus.push({ id: Store.uid(), title: it.title, done: false });
   Store.save(); render();
-  toast('Back on today\'s list.');
+  toast(toFocus ? 'Back on today\'s focus.' : 'Focus was full — added to Bonus.');
 }
 function forget(id) {
   const s = Store.get();
@@ -1353,6 +1403,82 @@ function toast(msg) {
   toastEl.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2600);
+}
+
+/* ---------------- first-run walkthrough (spotlight coachmarks) ----------------
+   Runs once after onboarding (and once for already-onboarded users). Dims the
+   screen, rings one real element at a time, with Skip / Next. Replayable from You. */
+const TOUR_STEPS = [
+  { key: 'focus', title: 'Pick 1–3. That\'s your day.', body: 'Knock these out and keep rolling — there\'s always a next rep.', scroll: true, pos: 'below' },
+  { key: 'fab', title: 'Capture anything, fast.', body: 'One tap routes a thought to Focus, Bonus, Priorities, Notes, or a daily.', pos: 'above' },
+  { key: 'rhythm', title: 'Build a daily rhythm.', body: 'Small reps stacked every day — the more you log, the more it compounds.', scroll: true, pos: 'below' },
+  { key: 'priorities', title: 'A backlog that sorts itself.', body: 'Mark important and/or urgent — it lands in Do, Plan, Quick, or Let go.', pos: 'above' },
+  { key: 'you', title: 'Watch your momentum grow.', body: 'Your day count, the insights forming, and a one-tap backup of your data.', pos: 'above' }
+];
+let tourIdx = -1;
+function tourTarget(key) {
+  if (key === 'fab') return document.querySelector('.fab');
+  if (key === 'rhythm') return document.querySelector('.rhythm, .rhythm-empty');
+  if (key === 'priorities') return document.querySelectorAll('.nav .navbtn')[1] || null;
+  if (key === 'you') return document.querySelectorAll('.nav .navbtn')[3] || null;
+  return document.querySelector('.screen .block');   // first block on Today = focus
+}
+function maybeStartTour() {
+  const s = Store.get();
+  if (s.onboarded && !s.tourSeen) startTour();
+}
+function startTour() {
+  if (view !== 'today') { view = 'today'; render(); }
+  tourIdx = 0;
+  showTourStep();
+}
+function endTour() {
+  Store.set({ tourSeen: true });
+  tourIdx = -1;
+  const el = document.getElementById('tour');
+  if (el) el.remove();
+}
+function tourNext() {
+  if (tourIdx >= TOUR_STEPS.length - 1) { endTour(); return; }
+  tourIdx++; showTourStep();
+}
+function showTourStep() {
+  let el = document.getElementById('tour');
+  if (!el) { el = document.createElement('div'); el.id = 'tour'; document.body.appendChild(el); }
+  const step = TOUR_STEPS[tourIdx];
+  const tgt = tourTarget(step.key);
+  if (tgt && step.scroll) {
+    tgt.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setTimeout(function () { paintTourStep(step, tourTarget(step.key)); }, 320);
+  } else {
+    paintTourStep(step, tgt);
+  }
+}
+function paintTourStep(step, tgt) {
+  const el = document.getElementById('tour');
+  if (!el || tourIdx < 0) return;
+  const n = tourIdx + 1, total = TOUR_STEPS.length;
+  let hi = '', dim = '', cardPos = 'top:42%;';
+  if (tgt) {
+    const r = tgt.getBoundingClientRect();
+    const pad = 6;
+    hi = '<div class="tour-hi" style="top:' + (r.top - pad) + 'px;left:' + (r.left - pad) +
+      'px;width:' + (r.width + pad * 2) + 'px;height:' + (r.height + pad * 2) + 'px"></div>';
+    cardPos = step.pos === 'above'
+      ? 'bottom:' + (window.innerHeight - r.top + 14) + 'px;'
+      : 'top:' + (r.bottom + 14) + 'px;';
+  } else {
+    dim = '<div class="tour-dim"></div>';
+  }
+  el.innerHTML = dim + hi +
+    '<div class="tour-card" style="' + cardPos + '">' +
+    '<div class="tour-step">Step ' + n + ' of ' + total + '</div>' +
+    '<div class="tour-title">' + esc(step.title) + '</div>' +
+    '<div class="tour-body">' + esc(step.body) + '</div>' +
+    '<div class="tour-actions">' +
+    '<button class="tour-skip" onclick="endTour()">Skip</button>' +
+    '<button class="tour-next" onclick="tourNext()">' + (n === total ? 'Done' : 'Next') + '</button>' +
+    '</div></div>';
 }
 
 /* ---------------- service worker ---------------- */
